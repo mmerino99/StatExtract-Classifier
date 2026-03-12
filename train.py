@@ -12,7 +12,7 @@ Expected data layout
     invoices/    ← 20 PDF/image invoices
     emails/      ← 20 PDF/image emails
     contracts/   ← 20 PDF/image contracts
-    reports/     ← 20 PDF/image reports
+    resumes/     ← 20 PDF/image resumes
 
 Accepted file types: .pdf  .png  .jpg  .jpeg  .tiff  .tif  .bmp
 
@@ -38,7 +38,7 @@ CATEGORY_MAP = {
     "invoices":  "Invoice",
     "emails":    "Email",
     "contracts": "Contract",
-    "reports":   "Report",
+    "resumes":   "Resume",
 }
 
 SUPPORTED = {".pdf", ".png", ".jpg", ".jpeg", ".tiff", ".tif", ".bmp"}

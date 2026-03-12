@@ -12,7 +12,7 @@
   --invoice:  #3b82f6;   /* blue   */
   --email:    #10b981;   /* green  */
   --contract: #8b5cf6;   /* purple */
-  --report:   #f59e0b;   /* amber  */
+  --resume:   #f59e0b;   /* amber  */
   --unknown:  #64748b;   /* slate  */
 
   --radius: 14px;
@@ -196,7 +196,7 @@ body {
 .result-badge[data-label="INVOICE"]  { background: var(--invoice);  }
 .result-badge[data-label="EMAIL"]    { background: var(--email);    }
 .result-badge[data-label="CONTRACT"] { background: var(--contract); }
-.result-badge[data-label="REPORT"]   { background: var(--report);   }
+.result-badge[data-label="RESUME"]   { background: var(--resume);   }
 
 .result-summary {
   font-size: 1.3rem;

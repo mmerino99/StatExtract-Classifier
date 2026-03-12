@@ -29,7 +29,6 @@ OpenCV preprocessing pipeline (applied before both engines)
   performs its own thresholding and aggressive binarisation hurts it.
 """
 
-import subprocess
 import numpy as np
 import cv2
 import pytesseract
@@ -38,32 +37,6 @@ from pathlib import Path
 
 # ── Tesseract path on Windows ────────────────────────────────────────────────
 TESSERACT_CMD = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-
-# Extra language packs to use when available.
-# Tesseract skips a language silently if the pack is not installed.
-_EXTRA_LANGS = ["spa", "fra", "deu", "por", "ita"]
-
-
-def _build_tesseract_lang_string() -> str:
-    """
-    Return a '+'-joined language string for Tesseract containing English
-    plus any extra language packs that are actually installed.
-    Falls back to 'eng' only if none are found.
-    """
-    try:
-        result = subprocess.run(
-            [TESSERACT_CMD, "--list-langs"],
-            capture_output=True, text=True, timeout=5,
-        )
-        installed = set(result.stdout.strip().splitlines() +
-                        result.stderr.strip().splitlines())
-        langs = ["eng"] + [l for l in _EXTRA_LANGS if l in installed]
-    except Exception:
-        langs = ["eng"]
-    return "+".join(langs)
-
-
-_TESSERACT_LANGS = _build_tesseract_lang_string()
 
 SUPPORTED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".tiff", ".tif", ".bmp"}
 
@@ -150,10 +123,10 @@ class OCREngine:
         # Step 1 – shared preprocessing (good for both engines)
         gray = self._preprocess_for_tesseract(image)
 
-        # Step 2 – Tesseract attempt (multilingual if packs are installed)
+        # Step 2 – Tesseract attempt (English only — model trained on English)
         config = "--oem 1 --psm 3"
         tess_text = pytesseract.image_to_string(
-            gray, lang=_TESSERACT_LANGS, config=config
+            gray, lang="eng", config=config
         ).strip()
 
         word_count = len(tess_text.split())
@@ -217,11 +190,7 @@ class OCREngine:
             try:
                 import easyocr
                 print("    [EasyOCR] Loading model (first load may take a minute) …")
-                # Include common Latin-script languages; EasyOCR downloads
-                # models on first use (~100 MB per language)
-                self._easy_reader = easyocr.Reader(
-                    ["en", "es", "fr", "de", "pt", "it"], gpu=False
-                )
+                self._easy_reader = easyocr.Reader(["en"], gpu=False)
             except ImportError:
                 raise ImportError(
                     "EasyOCR is not installed.\n"

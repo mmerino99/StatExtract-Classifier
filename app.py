@@ -96,7 +96,7 @@ def classify():
             for s in result["all_scores"]
         ]
 
-        # Build warning message — combine low-quality and non-English warnings
+        # Build warning message
         warning = low_quality or is_non_english
         warning_parts = []
         if low_quality:
@@ -106,9 +106,9 @@ def classify():
             )
         if is_non_english:
             warning_parts.append(
-                f"This document appears to be in {language_name}. "
-                "The model was trained on English documents — "
-                "classification relies on structural signals and may be less accurate."
+                f"⚠ NON-ENGLISH DOCUMENT DETECTED ({language_name}). "
+                "This model was trained exclusively on English documents. "
+                "The result shown below should NOT be relied upon."
             )
 
         return jsonify({

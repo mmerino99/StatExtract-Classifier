@@ -142,8 +142,10 @@
     if (data.warning && data.warning_msg) {
       warningMsg.textContent = data.warning_msg;
       warningBanner.classList.remove("hidden");
+      warningBanner.classList.toggle("warning-banner--error", !!data.is_non_english);
     } else {
       warningBanner.classList.add("hidden");
+      warningBanner.classList.remove("warning-banner--error");
     }
 
     // ── Primary confidence bar (colour-coded) ──

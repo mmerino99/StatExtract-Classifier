@@ -29,6 +29,7 @@ OpenCV preprocessing pipeline (applied before both engines)
   performs its own thresholding and aggressive binarisation hurts it.
 """
 
+import re
 import numpy as np
 import cv2
 import pytesseract
@@ -51,6 +52,33 @@ MIN_USABLE_WORDS = 8
 
 # A page is considered blank when this fraction of pixels are near-white
 BLANK_WHITE_RATIO = 0.97
+
+
+def _fix_ocr_errors(text: str) -> str:
+    """
+    Correct the most common Tesseract character substitution errors.
+
+    These are systematic mistakes caused by font rendering, scan quality,
+    or sans-serif letterforms that confuse the LSTM model:
+
+      | → I   (capital I misread as pipe in many sans-serif fonts)
+      0 → O   (zero vs letter O — corrected only when surrounded by letters)
+      l → 1   (lowercase l vs digit 1 — corrected only in numeric contexts)
+      rn → m  (two-character split of 'm' at low resolution)
+      vv → w  (two-character split of 'w')
+    """
+    # Isolated pipe → capital I
+    # Matches: start-of-line pipe, pipe after space/punctuation, pipe before space
+    text = re.sub(r'(?<![A-Za-z0-9])\|(?![A-Za-z0-9])', 'I', text)
+    # Pipe followed immediately by a letter (common in "| am", "| will")
+    text = re.sub(r'\| ([a-z])', r'I \1', text)
+    # Common two-character OCR splits
+    text = re.sub(r'\brn\b', 'm', text)   # "rn" as standalone word
+    text = re.sub(r'(?<=[a-z])rn(?=[a-z])', 'm', text)   # "rnorning" → "morning"
+    text = re.sub(r'(?<=[a-z])vv(?=[a-z])', 'w', text)   # "vvord" → "word"
+    # Zero vs O: 0 between letters → O
+    text = re.sub(r'(?<=[A-Za-z])0(?=[A-Za-z])', 'O', text)
+    return text
 
 
 class LowQualityImageError(ValueError):
@@ -129,6 +157,7 @@ class OCREngine:
             gray, lang="eng", config=config
         ).strip()
 
+        tess_text  = _fix_ocr_errors(tess_text)
         word_count = len(tess_text.split())
         if word_count >= MIN_WORDS_THRESHOLD:
             self.last_engine_used = "tesseract"

@@ -11,7 +11,7 @@
   /* Category colours */
   --invoice:  #3b82f6;   /* blue   */
   --email:    #10b981;   /* green  */
-  --form:     #8b5cf6;   /* purple */
+  --questionnaire: #8b5cf6;   /* purple */
   --resume:   #f59e0b;   /* amber  */
   --unknown:  #64748b;   /* slate  */
 
@@ -195,7 +195,7 @@ body {
 }
 .result-badge[data-label="INVOICE"]  { background: var(--invoice);  }
 .result-badge[data-label="EMAIL"]    { background: var(--email);    }
-.result-badge[data-label="FORM"]     { background: var(--form);     }
+.result-badge[data-label="QUESTIONNAIRE"] { background: var(--questionnaire); }
 .result-badge[data-label="RESUME"]   { background: var(--resume);   }
 
 .result-summary {

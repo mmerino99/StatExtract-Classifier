@@ -12,5 +12,6 @@ env/
 .DS_Store
 Thumbs.db
 
-# Temp / processed outputs
+# Training data (large binary image files — keep locally, not in git)
+data/raw/
 data/processed/

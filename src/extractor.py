@@ -58,6 +58,7 @@ class InvoiceExtractor:
         return match.group(1) if match else None
     
 
+# Test
 if __name__ == "__main__":
     sample_ocr_text = """
     Acme Corp
@@ -74,3 +75,59 @@ if __name__ == "__main__":
     print("Invoice Number:", extractor.extract_invoice_number())
     print("All Dates Found:", extractor.extract_dates())
     print("Total Amount:", extractor.extract_total_amount())
+
+
+
+
+
+class EmailExtractor:
+    def __init__(self, raw_text: str):
+        self.text = raw_text
+
+    def extract_sender(self):
+        # non capturing group finds From and gets what comes after
+        match = re.search(r"(?i)^From:\s*(.+)", self.text, re.MULTILINE)
+        return match.group(1).strip() if match else None
+
+    def extract_recipient(self):
+        # non capturing group finds To and gets what comes after
+        match = re.search(r"(?i)^To:\s*(.+)", self.text, re.MULTILINE)
+        return match.group(1).strip() if match else None
+
+    def extract_date(self):
+        # non capturing group finds Date and gets what comes after
+        match = re.search(r"(?i)^Date:\s*(.+)", self.text, re.MULTILINE)
+        return match.group(1).strip() if match else None
+
+    def extract_subject(self):
+        # non capturing group finds Subject and gets what comes after
+        match = re.search(r"(?i)^Subject:\s*(.+)", self.text, re.MULTILINE)
+        return match.group(1).strip() if match else None
+
+    def extract_all_email_addresses(self):
+        # finds all email addresses in the text
+        # you dont need a capturing group () because 
+        # re.findall() will return a list of all matches
+        pattern = r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
+        return re.findall(pattern, self.text)
+
+# Test
+if __name__ == "__main__":
+    sample_email_text = """
+    From: Jane Doe <jane.doe@example.com>
+    To: John Smith <jsmith@corp.net>
+    Date: October 12, 2025 10:30 AM
+    Subject: Q4 Project Update
+    
+    Hi John,
+    Please find the attached invoice for the Q4 project. If you have any questions, 
+    contact support@example.com.
+    
+    Best,
+    Jane
+    """
+    
+    email_ext = EmailExtractor(sample_email_text)
+    print("Sender:", email_ext.extract_sender())
+    print("Subject:", email_ext.extract_subject())
+    print("All Email Addresses Found:", email_ext.extract_all_email_addresses())

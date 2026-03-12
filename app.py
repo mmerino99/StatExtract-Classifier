@@ -23,6 +23,10 @@ from pathlib import Path
 from flask import Flask, jsonify, render_template, request
 
 from src.pipeline import ClassificationPipeline
+from src.ocr_engine import LowQualityImageError
+
+# Result is flagged as low-quality when fewer than this many words were extracted
+LOW_QUALITY_WORD_THRESHOLD = 30
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 32 * 1024 * 1024  # 32 MB upload limit
@@ -84,12 +88,24 @@ def classify():
 
         result = pipeline.predict_category(tmp_path)
 
+        word_count   = len(result["raw_text"].split())
+        low_quality  = word_count < LOW_QUALITY_WORD_THRESHOLD
+
         return jsonify({
             "label":        result["label"],
-            "confidence":   round(result["confidence"] * 100, 1),  # percent
+            "confidence":   round(result["confidence"] * 100, 1),
             "summary":      result["summary"],
             "text_preview": result["raw_text"][:600].strip(),
+            "warning":      low_quality,
+            "warning_msg":  (
+                f"Only {word_count} words were extracted. The document may contain "
+                "heavy handwriting, noise, or low scan quality — the classification "
+                "result should be treated with caution."
+            ) if low_quality else None,
         })
+
+    except LowQualityImageError as exc:
+        return jsonify({"error": str(exc)}), 422
 
     except Exception as exc:
         app.logger.error("Classification failed: %s", exc, exc_info=True)

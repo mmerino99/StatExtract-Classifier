@@ -22,6 +22,8 @@
   const confidenceBar = document.getElementById("confidenceBar");
   const confidencePct = document.getElementById("confidencePct");
   const textPreview   = document.getElementById("textPreview");
+  const warningBanner = document.getElementById("warningBanner");
+  const warningMsg    = document.getElementById("warningMsg");
   const errorMessage  = document.getElementById("errorMessage");
 
   const resetBtn      = document.getElementById("resetBtn");
@@ -126,6 +128,14 @@
     resultSummary.textContent      = data.summary || `This is a ${label}.`;
     confidencePct.textContent      = `${data.confidence}%`;
     textPreview.textContent        = data.text_preview || "(no text extracted)";
+
+    // Show or hide the low-quality warning banner
+    if (data.warning && data.warning_msg) {
+      warningMsg.textContent = data.warning_msg;
+      warningBanner.classList.remove("hidden");
+    } else {
+      warningBanner.classList.add("hidden");
+    }
 
     // Animate confidence bar after card is visible
     confidenceBar.style.width = "0";

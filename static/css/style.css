@@ -176,6 +176,22 @@ body {
 .loading-title { font-size: 1.05rem; font-weight: 600; }
 .loading-sub   { font-size: .85rem; color: var(--text-muted); }
 
+/* ── Warning banner (inside result card) ─────────────────────────────────── */
+.warning-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 20px;
+  font-size: .85rem;
+  color: #92400e;
+  line-height: 1.5;
+}
+.warning-banner svg { flex-shrink: 0; margin-top: 1px; color: #d97706; }
+
 /* ── Result card ─────────────────────────────────────────────────────────── */
 .result-header {
   display: flex;

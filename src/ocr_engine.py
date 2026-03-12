@@ -46,6 +46,16 @@ MIN_WIDTH = 1400
 # If Tesseract extracts fewer words than this, assume handwriting and use EasyOCR
 MIN_WORDS_THRESHOLD = 20
 
+# If BOTH engines extract fewer words than this, the image is too degraded to classify
+MIN_USABLE_WORDS = 8
+
+# A page is considered blank when this fraction of pixels are near-white
+BLANK_WHITE_RATIO = 0.97
+
+
+class LowQualityImageError(ValueError):
+    """Raised when an image is blank, pure noise, or yields too little text."""
+
 
 class OCREngine:
     """
@@ -101,7 +111,12 @@ class OCREngine:
         """
         Try Tesseract first.  If it returns too few words (indicating the
         page is mostly handwritten or very degraded), fall back to EasyOCR.
+        Raises LowQualityImageError for blank or unreadable images.
         """
+        # Step 0 – reject blank / near-white pages before wasting OCR time
+        gray_raw = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY) if image.ndim == 3 else image
+        self._check_blank(gray_raw)
+
         # Step 1 – shared preprocessing (good for both engines)
         gray = self._preprocess_for_tesseract(image)
 
@@ -116,7 +131,16 @@ class OCREngine:
         # Step 3 – EasyOCR fallback (handwriting / poor scans)
         print(f"    [OCR] Tesseract returned only {word_count} words — "
               "switching to EasyOCR (handwriting mode) …")
-        return self._extract_with_easyocr(image)
+        easy_text = self._extract_with_easyocr(image)
+
+        # Step 4 – final guard: if both engines produced almost nothing, give up
+        combined = easy_text if len(easy_text.split()) > word_count else tess_text
+        if len(combined.split()) < MIN_USABLE_WORDS:
+            raise LowQualityImageError(
+                "Could not extract meaningful text. The image may be blank, "
+                "pure noise, or too degraded for OCR."
+            )
+        return combined
 
     # ── Tesseract preprocessing ───────────────────────────────────────────────
 
@@ -171,6 +195,31 @@ class OCREngine:
         prepped = self._preprocess_for_easyocr(image)
         results = reader.readtext(prepped, detail=0, paragraph=True)
         return "\n".join(results).strip()
+
+    # ── Quality guards ────────────────────────────────────────────────────────
+
+    def _check_blank(self, gray: np.ndarray) -> None:
+        """
+        Raise LowQualityImageError if the image is essentially blank.
+        A page is considered blank when ≥ BLANK_WHITE_RATIO of its pixels
+        are near-white (value ≥ 240).  This catches:
+          - empty pages / cover sheets
+          - mostly-white images with a small smudge or border
+          - corrupted / all-black images (invert check catches those too)
+        """
+        total = gray.size
+        white_pixels = int(np.sum(gray >= 240))
+        black_pixels = int(np.sum(gray <= 15))
+
+        if white_pixels / total >= BLANK_WHITE_RATIO:
+            raise LowQualityImageError(
+                "The image appears to be blank (near-white page). "
+                "Please upload a document with visible content."
+            )
+        if black_pixels / total >= BLANK_WHITE_RATIO:
+            raise LowQualityImageError(
+                "The image appears to be entirely black or severely underexposed."
+            )
 
     # ── Individual preprocessing steps ───────────────────────────────────────
 

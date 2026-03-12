@@ -2,13 +2,17 @@
 Phase 4 – Full Pipeline & Handoff to Person B
 Chains OCR → Feature Engineering → SVM into a single callable.
 
-Output contract (what Person B receives):
+Enriched output contract:
   {
-    "file"       : str   – original file path
-    "label"      : str   – e.g. "INVOICE", "CONTRACT"
-    "confidence" : float – model's confidence (0-1)
-    "summary"    : str   – human-readable one-liner
-    "raw_text"   : str   – every word the OCR extracted (for date/total parsing)
+    "file"            : str   – original file path
+    "label"           : str   – top predicted class (e.g. "INVOICE")
+    "confidence"      : float – 0-1 probability of top class
+    "is_uncertain"    : bool  – True when confidence < UNCERTAIN_THRESHOLD
+    "all_scores"      : list  – all classes ranked highest → lowest
+    "summary"         : str   – human-readable one-liner
+    "ocr_engine"      : str   – "tesseract" or "easyocr"
+    "word_count"      : int   – words extracted by OCR
+    "raw_text"        : str   – full OCR text for Person B
   }
 """
 
@@ -18,14 +22,15 @@ from src.ocr_engine import OCREngine
 from src.feature_engineering import TFIDFFeatureExtractor
 from src.classifier import DocumentClassifier
 
-_MODEL_PATH = Path("models/classifier.pkl")
+_MODEL_PATH      = Path("models/classifier.pkl")
 _VECTORIZER_PATH = Path("models/vectorizer.pkl")
+
+# Below this confidence the result is flagged as uncertain
+UNCERTAIN_THRESHOLD = 0.45
 
 
 class ClassificationPipeline:
-    """
-    End-to-end pipeline:  file path  →  label + raw text
-    """
+    """End-to-end pipeline:  file path  →  enriched result dict"""
 
     def __init__(
         self,
@@ -34,14 +39,13 @@ class ClassificationPipeline:
         tesseract_cmd: str | None = None,
     ):
         kwargs = {} if tesseract_cmd is None else {"tesseract_cmd": tesseract_cmd}
-        self.ocr = OCREngine(**kwargs)
+        self.ocr               = OCREngine(**kwargs)
         self.feature_extractor = TFIDFFeatureExtractor()
-        self.classifier = DocumentClassifier()
-        self.model_path = Path(model_path)
-        self.vectorizer_path = Path(vectorizer_path)
+        self.classifier        = DocumentClassifier()
+        self.model_path        = Path(model_path)
+        self.vectorizer_path   = Path(vectorizer_path)
 
     def load(self) -> None:
-        """Load pre-trained vectorizer and classifier from disk."""
         self.feature_extractor.load(self.vectorizer_path)
         self.classifier.load(self.model_path)
 
@@ -49,58 +53,71 @@ class ClassificationPipeline:
 
     def predict_category(self, file_path: str | Path) -> dict:
         """
-        Full pipeline:  file  →  result dict
+        Full pipeline:  file  →  enriched result dict
 
         Steps
         -----
-        1. OCR engine   → raw_text  (Phase 1)
-        2. TF-IDF       → feature vector  (Phase 2)
-        3. Linear SVM   → label + confidence  (Phase 3)
-        4. Pack result  → handoff dict for Person B  (Phase 4)
+        1. OCR engine       → raw_text + engine name + word count  (Phase 1)
+        2. TF-IDF           → feature vector                        (Phase 2)
+        3. Linear SVM       → all class probabilities               (Phase 3)
+        4. Pack result      → handoff dict for Person B             (Phase 4)
         """
         # Phase 1 – Vision
         raw_text: str = self.ocr.process_file(file_path)
+        ocr_engine: str = self.ocr.last_engine_used
+        word_count: int = self.ocr.last_word_count
 
         # Phase 2 – Feature engineering
         X = self.feature_extractor.transform([raw_text])
 
-        # Phase 3 – Classification
-        labels, confidences = self.classifier.predict(X)
-        label: str = labels[0]
-        confidence: float = float(confidences[0])
+        # Phase 3 – Classification (full probability distribution)
+        all_scores = self.classifier.predict_all(X)[0]  # first (only) row
+        top        = all_scores[0]
+        label      = top["label"]
+        confidence = top["confidence"]
 
         # Phase 4 – Pack handoff payload
-        article = "an" if label[0] in "AEIOU" else "a"
-        result = {
-            "file": str(file_path),
-            "label": label.upper(),
-            "confidence": confidence,
-            "summary": f"This is {article} {label.upper()}.",
-            "raw_text": raw_text,
+        article      = "an" if label[0].upper() in "AEIOU" else "a"
+        is_uncertain = confidence < UNCERTAIN_THRESHOLD
+
+        return {
+            "file":         str(file_path),
+            "label":        label.upper(),
+            "confidence":   confidence,
+            "is_uncertain": is_uncertain,
+            "all_scores":   all_scores,
+            "summary":      (
+                f"Uncertain — closest match is {label.upper()}."
+                if is_uncertain else
+                f"This is {article} {label.upper()}."
+            ),
+            "ocr_engine":   ocr_engine,
+            "word_count":   word_count,
+            "raw_text":     raw_text,
         }
-        return result
 
     # ── Formatted console handoff ────────────────────────────────────────────
 
     def handoff_to_person_b(self, result: dict) -> dict:
-        """
-        Print a clear handoff block so Person B knows exactly what to parse.
-        Returns the same result dict for programmatic use.
-        """
-        bar = "=" * 52
+        bar = "=" * 56
         print(f"\n{bar}")
         print("  CLASSIFICATION RESULT  (Person A → Person B)")
         print(bar)
-        print(f"  File       : {result['file']}")
-        print(f"  Label      : {result['label']}")
-        print(f"  Confidence : {result['confidence']:.1%}")
-        print(f"  Summary    : {result['summary']}")
+        print(f"  File         : {result['file']}")
+        print(f"  Label        : {result['label']}"
+              + ("  ⚠ UNCERTAIN" if result["is_uncertain"] else ""))
+        print(f"  Confidence   : {result['confidence']:.1%}")
+        print(f"  OCR engine   : {result['ocr_engine']}")
+        print(f"  Words found  : {result['word_count']}")
+        print(f"\n  All scores:")
+        for s in result["all_scores"]:
+            bar_fill = "█" * int(s["confidence"] * 20)
+            print(f"    {s['label']:<18} {s['confidence']:5.1%}  {bar_fill}")
         print(bar)
-        print("\n--- RAW TEXT (hand off to Person B for data extraction) ---\n")
+        print("\n--- RAW TEXT (hand off to Person B) ---\n")
         preview = result["raw_text"][:2000]
         print(preview)
-        remainder = len(result["raw_text"]) - len(preview)
-        if remainder > 0:
-            print(f"\n  … [{remainder:,} more characters not shown]")
+        if len(result["raw_text"]) > 2000:
+            print(f"\n  … [{len(result['raw_text'])-2000:,} more characters]")
         print()
         return result

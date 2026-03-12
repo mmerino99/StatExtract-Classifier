@@ -77,6 +77,29 @@ class DocumentClassifier:
         confidence = np.max(proba, axis=1)
         return labels, confidence
 
+    def predict_all(self, X) -> list[list[dict]]:
+        """
+        Return all class scores for each row in X, sorted highest → lowest.
+        Example for one document:
+          [
+            {"label": "Invoice",       "confidence": 0.82},
+            {"label": "Email",         "confidence": 0.10},
+            {"label": "Questionnaire", "confidence": 0.05},
+            {"label": "Resume",        "confidence": 0.03},
+          ]
+        """
+        proba = self.model.predict_proba(X)
+        classes = self.label_encoder.classes_
+        results = []
+        for row in proba:
+            scores = sorted(
+                [{"label": classes[i], "confidence": float(row[i])} for i in range(len(classes))],
+                key=lambda x: x["confidence"],
+                reverse=True,
+            )
+            results.append(scores)
+        return results
+
     # ── Persistence ──────────────────────────────────────────────────────────
 
     def save(self, path: str | Path) -> None:

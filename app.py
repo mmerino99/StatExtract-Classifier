@@ -4,19 +4,15 @@ app.py – Flask web server for the StatExtract-Classifier.
 Routes
 ------
   GET  /           → serves the drag-and-drop UI
-  POST /classify   → accepts a file upload, returns classification JSON
+  POST /classify   → accepts a file upload, returns enriched classification JSON
 
 Usage
 -----
-  python app.py
-
-Then open  http://127.0.0.1:5000  in your browser.
-
-Ensure the model has been trained first:
-  python train.py
+  python app.py   →   open http://127.0.0.1:5000
 """
 
 import os
+import time
 import tempfile
 from pathlib import Path
 
@@ -25,15 +21,14 @@ from flask import Flask, jsonify, render_template, request
 from src.pipeline import ClassificationPipeline
 from src.ocr_engine import LowQualityImageError
 
-# Result is flagged as low-quality when fewer than this many words were extracted
-LOW_QUALITY_WORD_THRESHOLD = 30
-
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 32 * 1024 * 1024  # 32 MB upload limit
 
 ALLOWED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".tiff", ".tif", ".bmp"}
 
-# Load the pipeline once at startup so models stay in memory
+# Flag result as low-quality when fewer than this many words were extracted
+LOW_QUALITY_WORD_THRESHOLD = 30
+
 pipeline = ClassificationPipeline()
 _models_loaded = False
 
@@ -42,9 +37,8 @@ def _ensure_models() -> bool:
     global _models_loaded
     if _models_loaded:
         return True
-    model_path = Path("models/classifier.pkl")
-    vec_path   = Path("models/vectorizer.pkl")
-    if not model_path.exists() or not vec_path.exists():
+    if not Path("models/classifier.pkl").exists() or \
+       not Path("models/vectorizer.pkl").exists():
         return False
     pipeline.load()
     _models_loaded = True
@@ -81,27 +75,45 @@ def classify():
 
     # ── Save to temp file, classify, clean up ──────────────────────────────
     tmp_path = None
+    t_start  = time.perf_counter()
+
     try:
         with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
             file.save(tmp)
             tmp_path = tmp.name
 
-        result = pipeline.predict_category(tmp_path)
+        result       = pipeline.predict_category(tmp_path)
+        elapsed_ms   = round((time.perf_counter() - t_start) * 1000)
 
-        word_count   = len(result["raw_text"].split())
+        word_count   = result["word_count"]
         low_quality  = word_count < LOW_QUALITY_WORD_THRESHOLD
 
+        # Round all_scores confidences to 1 decimal percent for the UI
+        all_scores_pct = [
+            {"label": s["label"], "confidence": round(s["confidence"] * 100, 1)}
+            for s in result["all_scores"]
+        ]
+
         return jsonify({
-            "label":        result["label"],
-            "confidence":   round(result["confidence"] * 100, 1),
-            "summary":      result["summary"],
-            "text_preview": result["raw_text"][:600].strip(),
-            "warning":      low_quality,
-            "warning_msg":  (
-                f"Only {word_count} words were extracted. The document may contain "
-                "heavy handwriting, noise, or low scan quality — the classification "
-                "result should be treated with caution."
+            # ── Core result ──────────────────────────────────────────────
+            "label":          result["label"],
+            "confidence":     round(result["confidence"] * 100, 1),
+            "is_uncertain":   result["is_uncertain"],
+            "summary":        result["summary"],
+            # ── All class probabilities ───────────────────────────────────
+            "all_scores":     all_scores_pct,
+            # ── OCR diagnostics ───────────────────────────────────────────
+            "ocr_engine":     result["ocr_engine"],
+            "word_count":     word_count,
+            "text_preview":   result["raw_text"][:600].strip(),
+            # ── Quality / timing ──────────────────────────────────────────
+            "warning":        low_quality,
+            "warning_msg": (
+                f"Only {word_count} words were extracted. "
+                "The document may contain heavy handwriting, noise, or a low-quality "
+                "scan — treat this classification with caution."
             ) if low_quality else None,
+            "elapsed_ms":     elapsed_ms,
         })
 
     except LowQualityImageError as exc:

@@ -17,21 +17,26 @@
   const resultCard    = document.getElementById("resultCard");
   const errorCard     = document.getElementById("errorCard");
 
+  const warningBanner = document.getElementById("warningBanner");
+  const warningMsg    = document.getElementById("warningMsg");
   const resultBadge   = document.getElementById("resultBadge");
   const resultSummary = document.getElementById("resultSummary");
   const confidenceBar = document.getElementById("confidenceBar");
   const confidencePct = document.getElementById("confidencePct");
+  const allScoresEl   = document.getElementById("allScores");
+  const chipEngine    = document.getElementById("chipEngine");
+  const chipWords     = document.getElementById("chipWords");
+  const chipTime      = document.getElementById("chipTime");
   const textPreview   = document.getElementById("textPreview");
-  const warningBanner = document.getElementById("warningBanner");
-  const warningMsg    = document.getElementById("warningMsg");
   const errorMessage  = document.getElementById("errorMessage");
-
   const resetBtn      = document.getElementById("resetBtn");
   const errorResetBtn = document.getElementById("errorResetBtn");
+  const loadingStage  = document.getElementById("loadingStage");
 
   let selectedFileObj = null;
+  let _startTime      = 0;
 
-  // ── State helpers ───────────────────────────────────────────────────────
+  // ── Utility ──────────────────────────────────────────────────────────────
   function showCard(card) {
     [uploadCard, loadingCard, resultCard, errorCard].forEach((c) => {
       c.classList.toggle("hidden", c !== card);
@@ -62,45 +67,45 @@
     e.preventDefault();
     dropZone.classList.add("drag-over");
   });
-
-  dropZone.addEventListener("dragleave", () => {
-    dropZone.classList.remove("drag-over");
-  });
-
+  dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drag-over"));
   dropZone.addEventListener("drop", (e) => {
     e.preventDefault();
     dropZone.classList.remove("drag-over");
     const file = e.dataTransfer.files[0];
     if (file) setFile(file);
   });
-
-  // clicking anywhere in the drop zone opens the file picker
   dropZone.addEventListener("click", (e) => {
-    if (e.target === browseBtn) return;   // handled separately below
+    if (e.target === browseBtn) return;
     fileInput.click();
   });
-
-  browseBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    fileInput.click();
-  });
-
-  fileInput.addEventListener("change", () => {
-    if (fileInput.files[0]) setFile(fileInput.files[0]);
-  });
-
-  clearBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    clearFile();
-  });
+  browseBtn.addEventListener("click", (e) => { e.stopPropagation(); fileInput.click(); });
+  fileInput.addEventListener("change", () => { if (fileInput.files[0]) setFile(fileInput.files[0]); });
+  clearBtn.addEventListener("click", (e) => { e.stopPropagation(); clearFile(); });
 
   // ── Classify ─────────────────────────────────────────────────────────────
   classifyBtn.addEventListener("click", classify);
+
+  // Animate the loading stage label to show progress phases
+  let _loadInterval = null;
+  const STAGES = ["Running OCR…", "Vectorising text (TF-IDF)…", "Classifying (SVM)…", "Finalising…"];
+  function startLoadingAnimation() {
+    let i = 0;
+    loadingStage.textContent = STAGES[0];
+    _loadInterval = setInterval(() => {
+      i = Math.min(i + 1, STAGES.length - 1);
+      loadingStage.textContent = STAGES[i];
+    }, 2500);
+  }
+  function stopLoadingAnimation() {
+    clearInterval(_loadInterval);
+  }
 
   async function classify() {
     if (!selectedFileObj) return;
 
     showCard(loadingCard);
+    startLoadingAnimation();
+    _startTime = performance.now();
 
     const form = new FormData();
     form.append("file", selectedFileObj);
@@ -109,27 +114,30 @@
       const res  = await fetch("/classify", { method: "POST", body: form });
       const data = await res.json();
 
-      if (!res.ok) {
-        throw new Error(data.error || `Server error ${res.status}`);
-      }
-
+      if (!res.ok) throw new Error(data.error || `Server error ${res.status}`);
       renderResult(data);
 
     } catch (err) {
       renderError(err.message || "Unknown error");
+    } finally {
+      stopLoadingAnimation();
     }
   }
 
   // ── Render result ────────────────────────────────────────────────────────
   function renderResult(data) {
-    const label = (data.label || "UNKNOWN").toUpperCase();
-    resultBadge.textContent        = label;
-    resultBadge.setAttribute("data-label", label);
-    resultSummary.textContent      = data.summary || `This is a ${label}.`;
-    confidencePct.textContent      = `${data.confidence}%`;
-    textPreview.textContent        = data.text_preview || "(no text extracted)";
+    const label      = (data.label || "UNKNOWN").toUpperCase();
+    const confidence = data.confidence ?? 0;
 
-    // Show or hide the low-quality warning banner
+    // ── Badge ──
+    resultBadge.textContent = label;
+    resultBadge.setAttribute("data-label", label);
+    resultBadge.classList.toggle("uncertain", !!data.is_uncertain);
+
+    // ── Summary ──
+    resultSummary.textContent = data.summary || `This is a ${label}.`;
+
+    // ── Warning banner ──
     if (data.warning && data.warning_msg) {
       warningMsg.textContent = data.warning_msg;
       warningBanner.classList.remove("hidden");
@@ -137,14 +145,50 @@
       warningBanner.classList.add("hidden");
     }
 
-    // Animate confidence bar after card is visible
+    // ── Primary confidence bar (colour-coded) ──
+    confidencePct.textContent = `${confidence}%`;
     confidenceBar.style.width = "0";
-    showCard(resultCard);
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        confidenceBar.style.width = `${data.confidence}%`;
-      });
+    confidenceBar.style.background =
+      confidence >= 70 ? "var(--conf-high)" :
+      confidence >= 45 ? "var(--conf-mid)"  :
+                         "var(--conf-low)";
+
+    // ── All class scores mini chart ──
+    allScoresEl.innerHTML = "";
+    (data.all_scores || []).forEach((s, idx) => {
+      const isTop = idx === 0;
+      const row   = document.createElement("div");
+      row.className = "score-row";
+      row.innerHTML = `
+        <span class="score-label">${s.label}</span>
+        <div class="score-bar-bg">
+          <div class="score-bar-fill${isTop ? " top" : ""}"
+               style="width:0"
+               data-target="${s.confidence}"></div>
+        </div>
+        <span class="score-pct${isTop ? " top" : ""}">${s.confidence}%</span>`;
+      allScoresEl.appendChild(row);
     });
+
+    // ── Diagnostics chips ──
+    const engineLabel = data.ocr_engine === "easyocr" ? "EasyOCR (handwriting)" : "Tesseract";
+    chipEngine.textContent  = "";   // reset then rebuild with icon + text
+    chipEngine.innerHTML    = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> OCR: ${engineLabel}`;
+    chipEngine.className    = `diag-chip engine-${data.ocr_engine || "tesseract"}`;
+    chipWords.innerHTML     = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16h16V8z"/><polyline points="14 2 14 8 20 8"/></svg> ${data.word_count ?? "—"} words extracted`;
+    chipTime.innerHTML      = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ${data.elapsed_ms ?? "—"} ms`;
+
+    // ── Text preview ──
+    textPreview.textContent = data.text_preview || "(no text extracted)";
+
+    // ── Show card, then animate bars ──
+    showCard(resultCard);
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      confidenceBar.style.width = `${confidence}%`;
+      document.querySelectorAll(".score-bar-fill[data-target]").forEach((el) => {
+        el.style.width = `${el.dataset.target}%`;
+      });
+    }));
   }
 
   // ── Render error ─────────────────────────────────────────────────────────

@@ -60,12 +60,15 @@ class LowQualityImageError(ValueError):
 class OCREngine:
     """
     Dual-engine OCR: Tesseract for printed text, EasyOCR fallback for handwriting.
+    After process_file() returns, inspect .last_engine_used and .last_word_count.
     """
 
     def __init__(self, tesseract_cmd: str = TESSERACT_CMD, dpi: int = 300):
         pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
         self.dpi = dpi
-        self._easy_reader = None   # lazy-loaded on first use (heavy model)
+        self._easy_reader = None       # lazy-loaded on first use (heavy model)
+        self.last_engine_used: str = "tesseract"
+        self.last_word_count:  int = 0
 
     # ── Public API ───────────────────────────────────────────────────────────
 
@@ -126,6 +129,8 @@ class OCREngine:
 
         word_count = len(tess_text.split())
         if word_count >= MIN_WORDS_THRESHOLD:
+            self.last_engine_used = "tesseract"
+            self.last_word_count  = word_count
             return tess_text
 
         # Step 3 – EasyOCR fallback (handwriting / poor scans)
@@ -135,11 +140,14 @@ class OCREngine:
 
         # Step 4 – final guard: if both engines produced almost nothing, give up
         combined = easy_text if len(easy_text.split()) > word_count else tess_text
-        if len(combined.split()) < MIN_USABLE_WORDS:
+        final_count = len(combined.split())
+        if final_count < MIN_USABLE_WORDS:
             raise LowQualityImageError(
                 "Could not extract meaningful text. The image may be blank, "
                 "pure noise, or too degraded for OCR."
             )
+        self.last_engine_used = "easyocr"
+        self.last_word_count  = final_count
         return combined
 
     # ── Tesseract preprocessing ───────────────────────────────────────────────

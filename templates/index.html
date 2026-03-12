@@ -26,7 +26,7 @@
 
   <main class="main">
 
-    <!-- ── Drop zone ─────────────────────────────────────── -->
+    <!-- ── Upload card ─────────────────────────────────── -->
     <section class="card upload-card" id="uploadCard">
       <div class="drop-zone" id="dropZone">
         <div class="drop-icon">
@@ -51,22 +51,20 @@
         <button class="btn-clear" id="clearBtn" title="Remove">✕</button>
       </div>
 
-      <button class="btn-classify" id="classifyBtn" disabled>
-        Classify Document
-      </button>
+      <button class="btn-classify" id="classifyBtn" disabled>Classify Document</button>
     </section>
 
-    <!-- ── Loading state ─────────────────────────────────── -->
+    <!-- ── Loading card ────────────────────────────────── -->
     <section class="card loading-card hidden" id="loadingCard">
       <div class="spinner"></div>
       <p class="loading-title">Analysing document…</p>
-      <p class="loading-sub">OCR → TF-IDF → SVM</p>
+      <p class="loading-sub" id="loadingStage">OCR → TF-IDF → SVM</p>
     </section>
 
-    <!-- ── Result card ───────────────────────────────────── -->
+    <!-- ── Result card ─────────────────────────────────── -->
     <section class="card result-card hidden" id="resultCard">
 
-      <!-- Low-quality warning banner (hidden by default) -->
+      <!-- Low-quality / uncertain warning -->
       <div class="warning-banner hidden" id="warningBanner">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
@@ -76,6 +74,7 @@
         <span id="warningMsg">Low text quality — result may be unreliable.</span>
       </div>
 
+      <!-- Header row: badge + reset -->
       <div class="result-header">
         <span class="result-badge" id="resultBadge">INVOICE</span>
         <button class="btn-reset" id="resetBtn">Classify another</button>
@@ -83,6 +82,7 @@
 
       <p class="result-summary" id="resultSummary">This is an INVOICE.</p>
 
+      <!-- Primary confidence bar -->
       <div class="confidence-row">
         <span class="confidence-label">Confidence</span>
         <div class="confidence-bar-bg">
@@ -91,13 +91,37 @@
         <span class="confidence-pct" id="confidencePct">—</span>
       </div>
 
+      <!-- All 4 class scores -->
+      <div class="all-scores-block">
+        <p class="all-scores-title">All class probabilities</p>
+        <div id="allScores"></div>
+      </div>
+
+      <!-- Diagnostics row: OCR engine · words extracted · processing time -->
+      <div class="diagnostics-row">
+        <span class="diag-chip" id="chipEngine">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          OCR: —
+        </span>
+        <span class="diag-chip" id="chipWords">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16h16V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          — words
+        </span>
+        <span class="diag-chip" id="chipTime">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          — ms
+        </span>
+      </div>
+
+      <!-- Extracted text preview -->
       <div class="text-preview-block">
         <p class="text-preview-label">Extracted text preview</p>
         <pre class="text-preview" id="textPreview"></pre>
       </div>
+
     </section>
 
-    <!-- ── Error card ────────────────────────────────────── -->
+    <!-- ── Error card ──────────────────────────────────── -->
     <section class="card error-card hidden" id="errorCard">
       <div class="error-icon">
         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

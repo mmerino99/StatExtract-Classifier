@@ -2,6 +2,7 @@
 pytesseract>=0.3.10
 opencv-python>=4.8.0
 PyMuPDF>=1.23.0          # PDF -> image (no Poppler needed on Windows)
+easyocr>=1.7.0           # deep-learning OCR — handles handwriting Tesseract cannot read
 
 # NLP & ML
 scikit-learn>=1.3.0

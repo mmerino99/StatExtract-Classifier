@@ -1,20 +1,32 @@
 """
 Phase 1 – Vision Engine
-Converts a PDF or image file into a clean string of text using:
-  1. PyMuPDF  : renders each PDF page to a high-resolution pixel buffer
-  2. OpenCV   : grayscale → upscale → deskew → CLAHE → sharpen →
-                adaptive threshold → denoise
-  3. Tesseract: extracts text from the preprocessed image
+Converts a PDF or image file into a clean string of text using a
+dual-engine OCR strategy:
 
-Preprocessing improvements over v1:
-  - Upscaling   : images narrower than MIN_WIDTH are scaled up before OCR.
-                  Tesseract accuracy drops sharply below ~150 px per character;
-                  upscaling to 2–3× recovers most garbled letters.
-  - CLAHE       : Contrast Limited Adaptive Histogram Equalisation normalises
-                  uneven lighting (e.g. scanned pages with shadowed corners).
-  - Sharpening  : An unsharp-mask kernel makes blurry letterforms crisper.
-  - Adaptive    : Adaptive thresholding handles pages where background brightness
-    threshold     varies across the image, outperforming global Otsu on scans.
+  Primary  : Tesseract  – fast, excellent on clean printed text
+  Fallback : EasyOCR    – deep-learning model, handles handwriting and
+                          mixed printed/handwritten documents that defeat
+                          Tesseract
+
+Engine selection logic
+----------------------
+  Tesseract runs first.  If it extracts fewer than MIN_WORDS_THRESHOLD
+  words, the page is assumed to contain significant handwriting (or
+  very poor scan quality) and EasyOCR is called instead.
+
+OpenCV preprocessing pipeline (applied before both engines)
+-----------------------------------------------------------
+  1. Grayscale            – strip colour noise
+  2. Upscale              – bring low-res scans up to Tesseract's sweet spot
+  3. Deskew               – correct rotated scans
+  4. CLAHE                – fix uneven lighting across the page
+  5. Unsharp mask         – sharpen blurry letterforms
+  6. Adaptive threshold   – robust binarisation under varied brightness
+  7. Denoise              – remove salt-and-pepper artefacts
+
+  For EasyOCR the same grayscale+upscale+deskew+CLAHE steps are applied
+  but the final hard binarisation is skipped — EasyOCR's internal network
+  performs its own thresholding and aggressive binarisation hurts it.
 """
 
 import numpy as np
@@ -23,22 +35,27 @@ import pytesseract
 import fitz  # PyMuPDF
 from pathlib import Path
 
-
 # ── Tesseract path on Windows ────────────────────────────────────────────────
 TESSERACT_CMD = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
 SUPPORTED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".tiff", ".tif", ".bmp"}
 
-# Upscale images whose shortest dimension is below this threshold (pixels)
+# Upscale images whose width is below this threshold before OCR
 MIN_WIDTH = 1400
+
+# If Tesseract extracts fewer words than this, assume handwriting and use EasyOCR
+MIN_WORDS_THRESHOLD = 20
 
 
 class OCREngine:
-    """Handles the full OCR pipeline from raw file to extracted text string."""
+    """
+    Dual-engine OCR: Tesseract for printed text, EasyOCR fallback for handwriting.
+    """
 
     def __init__(self, tesseract_cmd: str = TESSERACT_CMD, dpi: int = 300):
         pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
         self.dpi = dpi
+        self._easy_reader = None   # lazy-loaded on first use (heavy model)
 
     # ── Public API ───────────────────────────────────────────────────────────
 
@@ -56,7 +73,6 @@ class OCREngine:
     # ── Internal helpers ─────────────────────────────────────────────────────
 
     def _process_pdf(self, pdf_path: Path) -> str:
-        """Render every page of a PDF and concatenate extracted text."""
         doc = fitz.open(str(pdf_path))
         page_texts = []
         for page in doc:
@@ -67,7 +83,6 @@ class OCREngine:
         return "\n\n".join(page_texts)
 
     def _process_image_file(self, image_path: Path) -> str:
-        """Load an image file and extract text."""
         bgr = cv2.imread(str(image_path))
         if bgr is None:
             raise IOError(f"OpenCV could not read: {image_path}")
@@ -75,25 +90,41 @@ class OCREngine:
         return self._extract_text(rgb)
 
     def _pdf_page_to_array(self, page: fitz.Page) -> np.ndarray:
-        """Render a PDF page to an RGB numpy array at self.dpi."""
         zoom = self.dpi / 72
         matrix = fitz.Matrix(zoom, zoom)
         pix = page.get_pixmap(matrix=matrix, alpha=False)
-        img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.h, pix.w, 3)
-        return img
+        return np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.h, pix.w, 3)
 
-    # ── Pre-processing pipeline ──────────────────────────────────────────────
+    # ── Dual-engine text extraction ──────────────────────────────────────────
 
-    def preprocess(self, image: np.ndarray) -> np.ndarray:
+    def _extract_text(self, image: np.ndarray) -> str:
         """
-        Full OpenCV pipeline:
-          1. Grayscale            – strip colour noise
-          2. Upscale              – bring low-res scans up to Tesseract's sweet spot
-          3. Deskew               – correct rotated scans
-          4. CLAHE                – fix uneven lighting across the page
-          5. Unsharp mask         – sharpen blurry letterforms
-          6. Adaptive threshold   – robust binarisation under varied brightness
-          7. Denoise              – remove salt-and-pepper artefacts
+        Try Tesseract first.  If it returns too few words (indicating the
+        page is mostly handwritten or very degraded), fall back to EasyOCR.
+        """
+        # Step 1 – shared preprocessing (good for both engines)
+        gray = self._preprocess_for_tesseract(image)
+
+        # Step 2 – Tesseract attempt
+        config = "--oem 1 --psm 3"   # oem 1 = LSTM only (better on degraded text)
+        tess_text = pytesseract.image_to_string(gray, config=config).strip()
+
+        word_count = len(tess_text.split())
+        if word_count >= MIN_WORDS_THRESHOLD:
+            return tess_text
+
+        # Step 3 – EasyOCR fallback (handwriting / poor scans)
+        print(f"    [OCR] Tesseract returned only {word_count} words — "
+              "switching to EasyOCR (handwriting mode) …")
+        return self._extract_with_easyocr(image)
+
+    # ── Tesseract preprocessing ───────────────────────────────────────────────
+
+    def _preprocess_for_tesseract(self, image: np.ndarray) -> np.ndarray:
+        """
+        Full pipeline optimised for printed/mixed text:
+          grayscale → upscale → deskew → CLAHE → sharpen →
+          adaptive threshold → denoise
         """
         gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY) if image.ndim == 3 else image
         gray = self._upscale(gray)
@@ -101,89 +132,89 @@ class OCREngine:
         gray = self._clahe(gray)
         gray = self._sharpen(gray)
         binary = self._adaptive_threshold(gray)
-        denoised = cv2.fastNlMeansDenoising(binary, h=15)
-        return denoised
+        return cv2.fastNlMeansDenoising(binary, h=15)
 
-    # ── Individual steps ─────────────────────────────────────────────────────
+    def _preprocess_for_easyocr(self, image: np.ndarray) -> np.ndarray:
+        """
+        Lighter pipeline for EasyOCR — upscale + deskew + CLAHE only.
+        Hard binarisation is deliberately skipped: EasyOCR's neural network
+        performs its own internal thresholding and aggressive pre-binarisation
+        destroys the stroke-width variation that handwriting recognition relies on.
+        """
+        gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY) if image.ndim == 3 else image
+        gray = self._upscale(gray)
+        gray = self._deskew(gray)
+        gray = self._clahe(gray)
+        # Return as 3-channel image: EasyOCR expects BGR or RGB
+        return cv2.cvtColor(gray, cv2.COLOR_GRAY2RGB)
+
+    # ── EasyOCR engine ────────────────────────────────────────────────────────
+
+    def _get_easy_reader(self):
+        """Lazy-load the EasyOCR reader (downloads ~500 MB model on first run)."""
+        if self._easy_reader is None:
+            try:
+                import easyocr
+                print("    [EasyOCR] Loading model (first load may take a minute) …")
+                # gpu=False ensures it works on machines without CUDA
+                self._easy_reader = easyocr.Reader(["en"], gpu=False)
+            except ImportError:
+                raise ImportError(
+                    "EasyOCR is not installed.\n"
+                    "Run:  pip install easyocr"
+                )
+        return self._easy_reader
+
+    def _extract_with_easyocr(self, image: np.ndarray) -> str:
+        """Run EasyOCR on the lightly preprocessed image."""
+        reader = self._get_easy_reader()
+        prepped = self._preprocess_for_easyocr(image)
+        results = reader.readtext(prepped, detail=0, paragraph=True)
+        return "\n".join(results).strip()
+
+    # ── Individual preprocessing steps ───────────────────────────────────────
 
     def _upscale(self, gray: np.ndarray) -> np.ndarray:
-        """
-        Scale up images that are too small for Tesseract to read accurately.
-        Tesseract performs best when text is ~30–40 px tall; most scanned
-        documents need to be at least 1400 px wide to meet that threshold.
-        """
         h, w = gray.shape
         if w >= MIN_WIDTH:
             return gray
         scale = MIN_WIDTH / w
-        new_w = int(w * scale)
-        new_h = int(h * scale)
-        return cv2.resize(gray, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
+        return cv2.resize(gray, (int(w * scale), int(h * scale)),
+                          interpolation=cv2.INTER_CUBIC)
 
     def _deskew(self, gray: np.ndarray) -> np.ndarray:
-        """
-        Estimate skew angle via minAreaRect on dark-pixel coordinates,
-        then rotate back to 0°. Skips rotation for angles < 0.5°.
-        """
         coords = np.column_stack(np.where(gray < 128))
         if len(coords) < 50:
             return gray
-
         angle = cv2.minAreaRect(coords)[-1]
         if angle < -45:
             angle = 90 + angle
-
         if abs(angle) < 0.5:
             return gray
-
         h, w = gray.shape
-        center = (w // 2, h // 2)
-        M = cv2.getRotationMatrix2D(center, angle, 1.0)
-        return cv2.warpAffine(
-            gray, M, (w, h),
-            flags=cv2.INTER_CUBIC,
-            borderMode=cv2.BORDER_REPLICATE,
-        )
+        M = cv2.getRotationMatrix2D((w // 2, h // 2), angle, 1.0)
+        return cv2.warpAffine(gray, M, (w, h),
+                              flags=cv2.INTER_CUBIC,
+                              borderMode=cv2.BORDER_REPLICATE)
 
     def _clahe(self, gray: np.ndarray) -> np.ndarray:
-        """
-        Contrast Limited Adaptive Histogram Equalisation.
-        Divides the image into tiles and equalises each independently,
-        which corrects shadowed or unevenly lit scans without blowing out
-        bright regions (unlike plain histogram equalisation).
-        """
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-        return clahe.apply(gray)
+        return cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(gray)
 
     def _sharpen(self, gray: np.ndarray) -> np.ndarray:
-        """
-        Unsharp mask: subtract a blurred version from the original to
-        amplify high-frequency edges, making blurry letterforms crisper.
-        """
         blurred = cv2.GaussianBlur(gray, (0, 0), sigmaX=3)
         return cv2.addWeighted(gray, 1.5, blurred, -0.5, 0)
 
     def _adaptive_threshold(self, gray: np.ndarray) -> np.ndarray:
-        """
-        Adaptive (local) thresholding: each pixel's threshold is computed
-        from the mean of its neighbourhood (blockSize x blockSize window).
-        Handles pages where background brightness varies — much more robust
-        than global Otsu on real-world scanned documents.
-        """
         return cv2.adaptiveThreshold(
             gray, 255,
             cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
             cv2.THRESH_BINARY,
-            blockSize=31,   # neighbourhood window — tune up if text is large
-            C=15,           # constant subtracted from mean — tune up to remove noise
+            blockSize=31,
+            C=15,
         )
 
-    def _extract_text(self, image: np.ndarray) -> str:
-        """Apply preprocessing and run Tesseract on one image."""
-        processed = self.preprocess(image)
-        # --oem 3  → best available engine (LSTM + legacy combined)
-        # --psm 3  → fully automatic page segmentation (better than psm 6
-        #            for mixed-layout documents like invoices and forms)
-        config = "--oem 3 --psm 3"
-        text = pytesseract.image_to_string(processed, config=config)
-        return text.strip()
+    # ── Legacy public method (used by demo_ocr.py) ────────────────────────────
+
+    def preprocess(self, image: np.ndarray) -> np.ndarray:
+        """Expose the Tesseract preprocessing pipeline for debug/demo use."""
+        return self._preprocess_for_tesseract(image)

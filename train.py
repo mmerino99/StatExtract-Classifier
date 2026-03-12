@@ -36,6 +36,7 @@ What improved
 """
 
 import argparse
+import json
 import sys
 from collections import Counter
 from pathlib import Path
@@ -47,6 +48,7 @@ from src.classifier import DocumentClassifier
 
 DATA_DIR   = Path("data/raw")
 MODELS_DIR = Path("models")
+CACHE_FILE = Path("data/ocr_cache.json")   # persists OCR results between runs
 
 CATEGORY_MAP = {
     "invoices":       "Invoice",
@@ -58,12 +60,30 @@ CATEGORY_MAP = {
 SUPPORTED = {".pdf", ".png", ".jpg", ".jpeg", ".tiff", ".tif", ".bmp"}
 
 
+def load_cache() -> dict:
+    if CACHE_FILE.exists():
+        with open(CACHE_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        print(f"  OCR cache loaded — {len(data)} entries already processed.")
+        return data
+    return {}
+
+
+def save_cache(cache: dict) -> None:
+    CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(CACHE_FILE, "w", encoding="utf-8") as f:
+        json.dump(cache, f, ensure_ascii=False)
+
+
 def collect_training_data(
     ocr: OCREngine,
     limit: int | None,
 ) -> tuple[list[str], list[str]]:
     texts:  list[str] = []
     labels: list[str] = []
+
+    cache = load_cache()
+    new_entries = 0
 
     for folder_name, label in CATEGORY_MAP.items():
         folder = DATA_DIR / folder_name
@@ -79,16 +99,31 @@ def collect_training_data(
         if limit:
             files = files[:limit]
 
-        print(f"\n  [{label}]  {len(files)} file(s) …")
-        for fpath in tqdm(files, desc=f"  {label:<10}", unit="file", leave=False):
-            try:
-                text = ocr.process_file(fpath)
-                if text.strip():
-                    texts.append(text)
-                    labels.append(label)
-            except Exception as exc:
-                print(f"    ✗ {fpath.name}: {exc}")
+        cached_count = sum(1 for f in files if str(f) in cache)
+        print(f"\n  [{label}]  {len(files)} file(s)  ({cached_count} cached, {len(files) - cached_count} need OCR) …")
 
+        for fpath in tqdm(files, desc=f"  {label:<10}", unit="file", leave=False):
+            key = str(fpath)
+            if key in cache:
+                text = cache[key]
+            else:
+                try:
+                    text = ocr.process_file(fpath)
+                    cache[key] = text
+                    new_entries += 1
+                    # Save after every 10 new entries so progress survives interruption
+                    if new_entries % 10 == 0:
+                        save_cache(cache)
+                except Exception as exc:
+                    print(f"    ✗ {fpath.name}: {exc}")
+                    continue
+
+            if text.strip():
+                texts.append(text)
+                labels.append(label)
+
+    save_cache(cache)
+    print(f"\n  Cache updated — {new_entries} new entries written to {CACHE_FILE}")
     return texts, labels
 
 

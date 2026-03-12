@@ -25,6 +25,7 @@
   const confidencePct = document.getElementById("confidencePct");
   const allScoresEl   = document.getElementById("allScores");
   const chipEngine    = document.getElementById("chipEngine");
+  const chipLang      = document.getElementById("chipLang");
   const chipWords     = document.getElementById("chipWords");
   const chipTime      = document.getElementById("chipTime");
   const textPreview   = document.getElementById("textPreview");
@@ -172,9 +173,15 @@
 
     // ── Diagnostics chips ──
     const engineLabel = data.ocr_engine === "easyocr" ? "EasyOCR (handwriting)" : "Tesseract";
-    chipEngine.textContent  = "";   // reset then rebuild with icon + text
+    chipEngine.textContent  = "";
     chipEngine.innerHTML    = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> OCR: ${engineLabel}`;
     chipEngine.className    = `diag-chip engine-${data.ocr_engine || "tesseract"}`;
+
+    const langName  = data.language_name || data.detected_language || "Unknown";
+    const langClass = data.is_non_english ? "lang-non-english" : "lang-english";
+    chipLang.innerHTML  = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg> ${langName}`;
+    chipLang.className  = `diag-chip ${langClass}`;
+
     chipWords.innerHTML     = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16h16V8z"/><polyline points="14 2 14 8 20 8"/></svg> ${data.word_count ?? "—"} words extracted`;
     chipTime.innerHTML      = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ${data.elapsed_ms ?? "—"} ms`;
 

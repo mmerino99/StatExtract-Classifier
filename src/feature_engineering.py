@@ -44,6 +44,11 @@ from sklearn.preprocessing import MaxAbsScaler
 for _pkg in ("stopwords", "wordnet", "omw-1.4"):
     nltk.download(_pkg, quiet=True)
 
+# NLTK language codes for the stopword corpus
+# Covers the most common document languages beyond English
+_STOPWORD_LANGUAGES = ["english", "spanish", "french", "german",
+                       "portuguese", "italian", "dutch"]
+
 
 # ── Structural signal definitions ────────────────────────────────────────────
 
@@ -88,7 +93,15 @@ class TextPreprocessor:
     """Cleans and normalises a raw text string for TF-IDF."""
 
     def __init__(self):
-        self._stop_words = set(stopwords.words("english"))
+        # Combine stopwords from all supported languages so common words
+        # like "de", "le", "und", "para" are filtered out of non-English docs
+        combined: set[str] = set()
+        for lang in _STOPWORD_LANGUAGES:
+            try:
+                combined.update(stopwords.words(lang))
+            except OSError:
+                pass
+        self._stop_words = combined
         self._lemmatizer = WordNetLemmatizer()
 
     def clean(self, text: str) -> str:

@@ -167,6 +167,11 @@ body {
 .diag-chip.engine-easyocr svg { color: #22c55e; }
 .diag-chip.engine-tesseract { background: #eff6ff; border-color: #93c5fd; color: #1e40af; }
 .diag-chip.engine-tesseract svg { color: #3b82f6; }
+/* Language chip — orange tint for non-English, default for English */
+.diag-chip.lang-non-english { background: #fff7ed; border-color: #fdba74; color: #9a3412; }
+.diag-chip.lang-non-english svg { color: #f97316; }
+.diag-chip.lang-english { background: #f0fdf4; border-color: #86efac; color: #166534; }
+.diag-chip.lang-english svg { color: #22c55e; }
 
 /* ── Extracted text preview ──────────────────────────────────────────────── */
 .text-preview-block { background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 16px; }

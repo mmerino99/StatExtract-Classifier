@@ -85,8 +85,10 @@ def classify():
         result       = pipeline.predict_category(tmp_path)
         elapsed_ms   = round((time.perf_counter() - t_start) * 1000)
 
-        word_count   = result["word_count"]
-        low_quality  = word_count < LOW_QUALITY_WORD_THRESHOLD
+        word_count      = result["word_count"]
+        low_quality     = word_count < LOW_QUALITY_WORD_THRESHOLD
+        is_non_english  = result.get("is_non_english", False)
+        language_name   = result.get("language_name", "Unknown")
 
         # Round all_scores confidences to 1 decimal percent for the UI
         all_scores_pct = [
@@ -94,26 +96,41 @@ def classify():
             for s in result["all_scores"]
         ]
 
+        # Build warning message — combine low-quality and non-English warnings
+        warning = low_quality or is_non_english
+        warning_parts = []
+        if low_quality:
+            warning_parts.append(
+                f"Only {word_count} words were extracted. "
+                "The document may contain heavy handwriting, noise, or a low-quality scan."
+            )
+        if is_non_english:
+            warning_parts.append(
+                f"This document appears to be in {language_name}. "
+                "The model was trained on English documents — "
+                "classification relies on structural signals and may be less accurate."
+            )
+
         return jsonify({
             # ── Core result ──────────────────────────────────────────────
-            "label":          result["label"],
-            "confidence":     round(result["confidence"] * 100, 1),
-            "is_uncertain":   result["is_uncertain"],
-            "summary":        result["summary"],
+            "label":              result["label"],
+            "confidence":         round(result["confidence"] * 100, 1),
+            "is_uncertain":       result["is_uncertain"],
+            "summary":            result["summary"],
             # ── All class probabilities ───────────────────────────────────
-            "all_scores":     all_scores_pct,
+            "all_scores":         all_scores_pct,
             # ── OCR diagnostics ───────────────────────────────────────────
-            "ocr_engine":     result["ocr_engine"],
-            "word_count":     word_count,
-            "text_preview":   result["raw_text"][:600].strip(),
+            "ocr_engine":         result["ocr_engine"],
+            "word_count":         word_count,
+            "text_preview":       result["raw_text"][:600].strip(),
+            # ── Language ─────────────────────────────────────────────────
+            "detected_language":  result.get("detected_language", "unknown"),
+            "language_name":      language_name,
+            "is_non_english":     is_non_english,
             # ── Quality / timing ──────────────────────────────────────────
-            "warning":        low_quality,
-            "warning_msg": (
-                f"Only {word_count} words were extracted. "
-                "The document may contain heavy handwriting, noise, or a low-quality "
-                "scan — treat this classification with caution."
-            ) if low_quality else None,
-            "elapsed_ms":     elapsed_ms,
+            "warning":            warning,
+            "warning_msg":        " ".join(warning_parts) if warning_parts else None,
+            "elapsed_ms":         elapsed_ms,
         })
 
     except LowQualityImageError as exc:

@@ -4,15 +4,18 @@ Chains OCR → Feature Engineering → SVM into a single callable.
 
 Enriched output contract:
   {
-    "file"            : str   – original file path
-    "label"           : str   – top predicted class (e.g. "INVOICE")
-    "confidence"      : float – 0-1 probability of top class
-    "is_uncertain"    : bool  – True when confidence < UNCERTAIN_THRESHOLD
-    "all_scores"      : list  – all classes ranked highest → lowest
-    "summary"         : str   – human-readable one-liner
-    "ocr_engine"      : str   – "tesseract" or "easyocr"
-    "word_count"      : int   – words extracted by OCR
-    "raw_text"        : str   – full OCR text for Person B
+    "file"              : str   – original file path
+    "label"             : str   – top predicted class (e.g. "INVOICE")
+    "confidence"        : float – 0-1 probability of top class
+    "is_uncertain"      : bool  – True when confidence < UNCERTAIN_THRESHOLD
+    "all_scores"        : list  – all classes ranked highest → lowest
+    "summary"           : str   – human-readable one-liner
+    "ocr_engine"        : str   – "tesseract" or "easyocr"
+    "word_count"        : int   – words extracted by OCR
+    "detected_language" : str   – ISO 639-1 code (e.g. "es") or "unknown"
+    "language_name"     : str   – human-readable language name
+    "is_non_english"    : bool  – True when detected language is not English
+    "raw_text"          : str   – full OCR text for Person B
   }
 """
 
@@ -21,6 +24,22 @@ from pathlib import Path
 from src.ocr_engine import OCREngine
 from src.feature_engineering import TFIDFFeatureExtractor
 from src.classifier import DocumentClassifier
+
+try:
+    from langdetect import detect as _langdetect
+    from langdetect import LangDetectException
+    _LANGDETECT_AVAILABLE = True
+except ImportError:
+    _LANGDETECT_AVAILABLE = False
+
+# ISO 639-1 → human-readable name for the UI
+_LANG_NAMES: dict[str, str] = {
+    "en": "English", "es": "Spanish", "fr": "French",
+    "de": "German",  "pt": "Portuguese", "it": "Italian",
+    "nl": "Dutch",   "pl": "Polish",    "ru": "Russian",
+    "zh-cn": "Chinese", "zh-tw": "Chinese", "ja": "Japanese",
+    "ar": "Arabic",  "ko": "Korean",
+}
 
 _MODEL_PATH      = Path("models/classifier.pkl")
 _VECTORIZER_PATH = Path("models/vectorizer.pkl")
@@ -67,6 +86,16 @@ class ClassificationPipeline:
         ocr_engine: str = self.ocr.last_engine_used
         word_count: int = self.ocr.last_word_count
 
+        # Language detection (best-effort — graceful fallback)
+        detected_language = "unknown"
+        if _LANGDETECT_AVAILABLE and len(raw_text.split()) >= 10:
+            try:
+                detected_language = _langdetect(raw_text)
+            except LangDetectException:
+                pass
+        language_name  = _LANG_NAMES.get(detected_language, detected_language.upper())
+        is_non_english = detected_language not in ("en", "unknown")
+
         # Phase 2 – Feature engineering
         X = self.feature_extractor.transform([raw_text])
 
@@ -81,19 +110,22 @@ class ClassificationPipeline:
         is_uncertain = confidence < UNCERTAIN_THRESHOLD
 
         return {
-            "file":         str(file_path),
-            "label":        label.upper(),
-            "confidence":   confidence,
-            "is_uncertain": is_uncertain,
-            "all_scores":   all_scores,
-            "summary":      (
+            "file":               str(file_path),
+            "label":              label.upper(),
+            "confidence":         confidence,
+            "is_uncertain":       is_uncertain,
+            "all_scores":         all_scores,
+            "summary":            (
                 f"Uncertain — closest match is {label.upper()}."
                 if is_uncertain else
                 f"This is {article} {label.upper()}."
             ),
-            "ocr_engine":   ocr_engine,
-            "word_count":   word_count,
-            "raw_text":     raw_text,
+            "ocr_engine":         ocr_engine,
+            "word_count":         word_count,
+            "detected_language":  detected_language,
+            "language_name":      language_name,
+            "is_non_english":     is_non_english,
+            "raw_text":           raw_text,
         }
 
     # ── Formatted console handoff ────────────────────────────────────────────

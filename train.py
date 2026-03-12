@@ -11,7 +11,7 @@ Expected data layout
   data/raw/
     invoices/    ← 20 PDF/image invoices
     emails/      ← 20 PDF/image emails
-    contracts/   ← 20 PDF/image contracts
+    forms/       ← 20 PDF/image forms
     resumes/     ← 20 PDF/image resumes
 
 Accepted file types: .pdf  .png  .jpg  .jpeg  .tiff  .tif  .bmp
@@ -37,7 +37,7 @@ MODELS_DIR = Path("models")
 CATEGORY_MAP = {
     "invoices":  "Invoice",
     "emails":    "Email",
-    "contracts": "Contract",
+    "forms":     "Form",
     "resumes":   "Resume",
 }
 

@@ -20,7 +20,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, accuracy_score, confusion_matrix
 from sklearn.preprocessing import LabelEncoder
 
-CATEGORY_LABELS: list[str] = ["Invoice", "Email", "Contract", "Resume"]
+CATEGORY_LABELS: list[str] = ["Invoice", "Email", "Form", "Resume"]
 
 
 class DocumentClassifier:

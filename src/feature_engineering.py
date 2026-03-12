@@ -135,7 +135,7 @@ class TFIDFFeatureExtractor:
     so neither dominates the SVM decision boundary.
     """
 
-    def __init__(self, max_features: int = 8000, ngram_range: tuple = (1, 2)):
+    def __init__(self, max_features: int = 15000, ngram_range: tuple = (1, 2)):
         self.preprocessor  = TextPreprocessor()
         self.structural    = StructuralFeatureExtractor()
         self.scaler        = MaxAbsScaler()   # scales each feature to [-1, 1]
@@ -143,7 +143,7 @@ class TFIDFFeatureExtractor:
             max_features=max_features,
             ngram_range=ngram_range,
             sublinear_tf=True,          # 1+log(tf) — reduces dominance of common words
-            min_df=2,                   # ignore terms that appear in only 1 document
+            min_df=3,                   # ignore OCR noise terms seen in < 3 documents
             strip_accents="unicode",
         )
 

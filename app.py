@@ -122,7 +122,7 @@ def classify():
             # ── OCR diagnostics ───────────────────────────────────────────
             "ocr_engine":         result["ocr_engine"],
             "word_count":         word_count,
-            "text_preview":       result["raw_text"][:600].strip(),
+            "text_preview":       result["raw_text"].strip(),
             # ── Language ─────────────────────────────────────────────────
             "detected_language":  result.get("detected_language", "unknown"),
             "language_name":      language_name,

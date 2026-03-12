@@ -20,7 +20,28 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, accuracy_score, confusion_matrix
 from sklearn.preprocessing import LabelEncoder
 
-CATEGORY_LABELS = ["Invoice", "Email", "Contract", "Report"]
+# RVL-CDIP 16-class label map  (integer id → human name)
+# Source: https://www.kaggle.com/datasets/uditamin/rvl-cdip-small
+RVLCDIP_LABELS: dict[int, str] = {
+    0:  "Letter",
+    1:  "Form",
+    2:  "Email",
+    3:  "Handwritten",
+    4:  "Advertisement",
+    5:  "Scientific Report",
+    6:  "Scientific Publication",
+    7:  "Specification",
+    8:  "File Folder",
+    9:  "News Article",
+    10: "Budget",
+    11: "Invoice",
+    12: "Presentation",
+    13: "Questionnaire",
+    14: "Resume",
+    15: "Memo",
+}
+
+CATEGORY_LABELS: list[str] = list(RVLCDIP_LABELS.values())
 
 
 class DocumentClassifier:

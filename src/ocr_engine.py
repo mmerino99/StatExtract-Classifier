@@ -51,7 +51,7 @@ MIN_WORDS_THRESHOLD = 20
 MIN_USABLE_WORDS = 8
 
 # A page is considered blank when this fraction of pixels are near-white
-BLANK_WHITE_RATIO = 0.97
+BLANK_WHITE_RATIO = 0.999
 
 
 def _fix_ocr_errors(text: str) -> str:
@@ -246,7 +246,7 @@ class OCREngine:
           - corrupted / all-black images (invert check catches those too)
         """
         total = gray.size
-        white_pixels = int(np.sum(gray >= 240))
+        white_pixels = int(np.sum(gray >= 250))
         black_pixels = int(np.sum(gray <= 15))
 
         if white_pixels / total >= BLANK_WHITE_RATIO:

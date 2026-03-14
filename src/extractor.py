@@ -58,7 +58,7 @@ class InvoiceExtractor:
         return match.group(1) if match else None
     
 
-# Test
+# Test invoice
 if __name__ == "__main__":
     sample_ocr_text = """
     Acme Corp
@@ -111,7 +111,7 @@ class EmailExtractor:
         pattern = r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
         return re.findall(pattern, self.text)
 
-# Test
+# Test email
 if __name__ == "__main__":
     sample_email_text = """
     From: Jane Doe <jane.doe@example.com>
@@ -131,3 +131,192 @@ if __name__ == "__main__":
     print("Sender:", email_ext.extract_sender())
     print("Subject:", email_ext.extract_subject())
     print("All Email Addresses Found:", email_ext.extract_all_email_addresses())
+
+
+class QuestionnaireExtractor:
+    def __init__(self, raw_text: str):
+        self.text = raw_text
+
+    def extract_questions(self):
+        """
+        Finds likely question prompts in a questionnaire.
+        Returns a list of question strings (best-effort).
+        """
+        # Heuristic 1: lines ending in a question mark
+        qmark_lines = re.findall(r"(?m)^\s*(.+?\?)\s*$", self.text)
+
+        # Heuristic 2: numbered prompts like "1. ...", "2) ..."
+        numbered = re.findall(r"(?m)^\s*(?:Q\s*)?\d+\s*[\.\)]\s*(.+?)\s*$", self.text)
+
+        # Combine, de-duplicate while keeping order
+        seen = set()
+        out = []
+        for q in (qmark_lines + numbered):
+            q = q.strip()
+            if not q:
+                continue
+            key = q.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(q)
+        return out
+
+    def extract_checkboxes(self):
+        """
+        Finds checkbox-like items such as [ ] Option, [x] Option, ( ) Option, (x) Option.
+        Returns a list of dicts: {"label": str, "checked": bool}
+        """
+        pattern = r"(?mi)^\s*(\[(?:x|X|\s)\]|\((?:x|X|\s)\))\s*(.+?)\s*$"
+        matches = re.findall(pattern, self.text)
+
+        results = []
+        for box, label in matches:
+            checked = "x" in box.lower()
+            results.append({"label": label.strip(), "checked": checked})
+        return results
+
+    def extract_key_value_answers(self):
+        """
+        Finds simple "Question: Answer" lines commonly used in forms.
+        Returns a list of dicts: {"question": str, "answer": str}
+        """
+        # Non-greedy question up to ":" or "-" delimiter, then capture answer
+        pattern = r"(?m)^\s*([A-Za-z0-9][^:\n]{2,}?)\s*[:\-]\s*(.+?)\s*$"
+        matches = re.findall(pattern, self.text)
+
+        results = []
+        for q, a in matches:
+            q = q.strip()
+            a = a.strip()
+            if not q or not a:
+                continue
+            results.append({"question": q, "answer": a})
+        return results
+
+
+# Test questionare
+if __name__ == "__main__":
+    sample_questionnaire_text = """
+    CUSTOMER INTAKE QUESTIONNAIRE
+    Name: John Smith
+    Email: john.smith@example.com
+
+    1) Do you have any allergies?
+    Yes - peanuts
+
+    2. Preferred contact method:
+    [x] Email
+    [ ] Phone
+    [ ] SMS
+
+    What is your availability? 
+    Mon-Fri after 5pm
+    """
+
+    q_ext = QuestionnaireExtractor(sample_questionnaire_text)
+    print("\nQuestions:", q_ext.extract_questions())
+    print("Checkboxes:", q_ext.extract_checkboxes())
+    print("Key/Value:", q_ext.extract_key_value_answers())
+
+
+class ResumeExtractor:
+    def __init__(self, raw_text: str):
+        self.text = raw_text
+
+    def extract_email(self):
+        match = re.search(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", self.text)
+        return match.group(0) if match else None
+
+    def extract_phone_number(self):
+        # Best-effort phone matcher: supports +country, separators, parentheses
+        pattern = (
+            r"(?x)"
+            r"(\+?\d{1,3}[\s\.-]?)?"      # optional country code
+            r"(\(?\d{2,4}\)?[\s\.-]?)"    # area code
+            r"\d{3,4}[\s\.-]?\d{3,4}"     # local number
+        )
+        match = re.search(pattern, self.text)
+        return match.group(0).strip() if match else None
+
+    def extract_links(self):
+        # finds common profile links (LinkedIn, GitHub, portfolios)
+        pattern = r"(?i)\bhttps?://[^\s\)\]]+\b"
+        return re.findall(pattern, self.text)
+
+    def extract_name(self):
+        """
+        Tries to get the candidate name (usually first non-empty line).
+        Skips lines that look like contact info.
+        """
+        for line in self.text.splitlines():
+            s = line.strip()
+            if not s:
+                continue
+            # skip obvious non-name lines
+            if "@" in s or re.search(r"\d{3}[\s\.-]?\d{3}", s) or s.lower().startswith(("resume", "curriculum vitae", "cv")):
+                continue
+            # if it's too long, it is probably a header sentence
+            if len(s) > 60:
+                continue
+            return s
+        return None
+
+    def extract_sections(self):
+        """
+        Splits resume into common sections using heading lines.
+        Returns a dict like {"EDUCATION": "...", "EXPERIENCE": "..."}.
+        """
+        # common headings, allow variations like "Work Experience"
+        headings = [
+            "summary", "professional summary", "objective",
+            "experience", "work experience", "employment",
+            "education", "skills", "projects", "certifications",
+            "languages", "awards", "publications",
+        ]
+
+        heading_re = r"|".join([re.escape(h) for h in headings])
+        pattern = rf"(?mi)^\s*({heading_re})\s*[:\-]?\s*$"
+
+        matches = list(re.finditer(pattern, self.text))
+        if not matches:
+            return {}
+
+        sections = {}
+        for i, m in enumerate(matches):
+            start = m.end()
+            end = matches[i + 1].start() if i + 1 < len(matches) else len(self.text)
+            title = m.group(1).strip().upper()
+            body = self.text[start:end].strip()
+            if body:
+                sections[title] = body
+        return sections
+
+
+# Test resume
+if __name__ == "__main__":
+    sample_resume_text = """
+    Jane A. Doe
+    janedoe@gmail.com  |  +1 (555) 123-4567
+    https://www.linkedin.com/in/jane-doe  https://github.com/janedoe
+
+    SUMMARY
+    Data analyst with 5+ years of experience in Python, SQL, and dashboards.
+
+    SKILLS
+    Python, Pandas, SQL, Tableau, PowerBI
+
+    EDUCATION
+    BSc Computer Science — Example University (2018)
+
+    EXPERIENCE
+    Data Analyst — Example Corp (2020–2025)
+    - Built ETL pipelines and automated reporting.
+    """
+
+    r_ext = ResumeExtractor(sample_resume_text)
+    print("\nName:", r_ext.extract_name())
+    print("Email:", r_ext.extract_email())
+    print("Phone:", r_ext.extract_phone_number())
+    print("Links:", r_ext.extract_links())
+    print("Sections:", list(r_ext.extract_sections().keys()))

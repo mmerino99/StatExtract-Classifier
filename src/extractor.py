@@ -1,10 +1,14 @@
 import re 
+import spacy
 
+# Load the NLP model once at the top of the file
+nlp = spacy.load("en_core_web_sm")
 
 class InvoiceExtractor:
-    def __init__(self, raw_text: str):
-
-        self.text = raw_text #initializing the raw text 
+    def __init__(self, raw_text: str, ocr_data_dict: dict):
+        self.text = raw_text # initializing the raw text 
+        self.ocr_data = ocr_data_dict # spatial data from Person A
+        self.doc = nlp(self.text)     # process text with spaCy for NLP
 
     def extract_invoice_number(self):
         # (?i) makes it case-insensitive we want it like that so 
@@ -57,6 +61,100 @@ class InvoiceExtractor:
         
         return match.group(1) if match else None
     
+    def extract_parties(self):
+        issuer = None
+        recipient = None
+
+        # 1. Find the Recipient
+        bill_to_match = re.search(r"(?i)(?:Bill\s*To|To)[\s:]+", self.text)
+        if bill_to_match:
+            start_pos = bill_to_match.end()
+            substring_doc = nlp(self.text[start_pos: start_pos + 200]) 
+            for ent in substring_doc.ents:
+                if ent.label_ in ["ORG", "PERSON"]:
+                    recipient = ent.text.strip()
+                    break
+
+        # 2. Find the Issuer
+        for ent in self.doc.ents:
+            if ent.label_ == "ORG":
+                if ent.text.strip() != recipient:
+                    issuer = ent.text.strip()
+                    break
+
+        return {"Issuer": issuer, "Recipient": recipient}
+    
+
+    def extract_total_spatial(self):
+        if not self.ocr_data:
+            return None 
+
+        amount_pattern = r"[$€]?\s*([\d,]+\.\d{2})"
+        candidate_amounts = []
+
+        for i in range(len(self.ocr_data['text'])):
+            word = self.ocr_data['text'][i]
+            y_coord = self.ocr_data['top'][i]
+
+            match = re.search(amount_pattern, word)
+            if match:
+                clean_num = float(match.group(1).replace(',', ''))
+                candidate_amounts.append({"value": clean_num, "y": y_coord})
+
+        if not candidate_amounts:
+            return None
+
+        candidate_amounts.sort(key=lambda x: x['y'], reverse=True)
+        bottom_amounts = candidate_amounts[:3]
+        
+        return max(bottom_amounts, key=lambda x: x['value'])['value']
+
+    
+    def get_structured_data(self):
+        """
+        Master function: Runs all extraction logic, formats it as a dictionary,
+        and attempts a basic math validation.
+        """
+        # 1. Grab all the raw extractions
+        inv_num = self.extract_invoice_number()
+        dates = self.extract_dates()
+        parties = self.extract_parties()
+        
+        # Try spatial total first; if it fails, fall back to text total
+        total = self.extract_total_spatial()
+        if not total:
+            # Need to convert string total to float if spatial failed
+            text_total = self.extract_total_amount()
+            total = float(text_total.replace(',', '')) if text_total else None
+
+        # 2. Logic to separate 'Invoice Date' from 'Due Date'
+        invoice_date = dates[0] if len(dates) > 0 else None
+        due_date = dates[1] if len(dates) > 1 else None
+
+        # 3. Validation Check: Look for Subtotal and Tax to prove the Total
+        subtotal_match = re.search(r"(?i)Subtotal[:\s]*[$€]?\s*([\d,]+\.\d{2})", self.text)
+        tax_match = re.search(r"(?i)Tax[:\s]*[$€]?\s*([\d,]+\.\d{2})", self.text)
+        
+        math_check_passed = "N/A" # Default if we can't find subtotal/tax
+        if subtotal_match and tax_match and total:
+            sub = float(subtotal_match.group(1).replace(',', ''))
+            tax = float(tax_match.group(1).replace(',', ''))
+            # Floating point math can be weird, so we check if the difference is very small
+            math_check_passed = abs((sub + tax) - total) < 0.05 
+
+        # 4. Package it all up
+        output = {
+            "Invoice_Number": inv_num,
+            "Invoice_Date": invoice_date,
+            "Due_Date": due_date,
+            "Issuer_Name": parties.get("Issuer"),
+            "Recipient_Name": parties.get("Recipient"),
+            "Total_Amount": total,
+            "Validation_Math_Passed": math_check_passed
+        }
+        
+        return output
+    
 
 # Test invoice
 if __name__ == "__main__":
@@ -71,7 +169,8 @@ if __name__ == "__main__":
     Total: $550.00
     """
 
-    extractor = InvoiceExtractor(sample_ocr_text)
+    # ocr_data_dict can be None when running from raw text only (no spatial data)
+    extractor = InvoiceExtractor(sample_ocr_text, None)
     print("Invoice Number:", extractor.extract_invoice_number())
     print("All Dates Found:", extractor.extract_dates())
     print("Total Amount:", extractor.extract_total_amount())
@@ -320,3 +419,7 @@ if __name__ == "__main__":
     print("Phone:", r_ext.extract_phone_number())
     print("Links:", r_ext.extract_links())
     print("Sections:", list(r_ext.extract_sections().keys()))
+
+
+
+

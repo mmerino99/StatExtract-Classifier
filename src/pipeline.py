@@ -24,6 +24,7 @@ from pathlib import Path
 from src.ocr_engine import OCREngine
 from src.feature_engineering import TFIDFFeatureExtractor
 from src.classifier import DocumentClassifier
+from src.extractor import InvoiceExtractor
 
 try:
     from langdetect import detect as _langdetect
@@ -109,7 +110,6 @@ class ClassificationPipeline:
         invoice_fields = None
         if str(label).strip().lower() == "invoice":
             try:
-                from src.extractor import InvoiceExtractor
                 invoice_fields = InvoiceExtractor(raw_text, ocr_data_dict=None).get_structured_data()
             except Exception as _exc:
                 import traceback

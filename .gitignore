@@ -1,20 +1,40 @@
-# Python cache
+# Python
 __pycache__/
 *.py[cod]
 *.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
 
 # Virtual environments
 .venv/
 venv/
 env/
+ENV/
 
-# OS files
+# IDE
+.idea/
+.vscode/
+*.suo
+*.user
+
+# OS
 .DS_Store
 Thumbs.db
+desktop.ini
 
-# Training data (large binary image files — keep locally, not in git)
-data/raw/
+# Project-specific runtime outputs
+debug_ocr/
 data/processed/
-
-# OCR cache (auto-generated, stays local)
 data/ocr_cache.json
+data/*.zip
+
+# Trained models (large binary files — regenerate with train.py)
+models/*.pkl
+
+# Uploaded files that Flask may cache
+uploads/
+*.tmp

@@ -391,29 +391,6 @@ class InvoiceExtractor:
         }
 
 
-# ── Smoke-test ───────────────────────────────────────────────────────────────
-
-# Test invoice
-if __name__ == "__main__":
-    sample_ocr_text = """
-    Acme Corp
-    Invoice Number: INV-89475
-    Date: 15/03/2026
-    Due Date: Apr 15, 2026
-
-    Services Rendered .... $500.00
-    Tax .................. $50.00
-    Total: $550.00
-    """
-
-    extractor = InvoiceExtractor(sample_ocr_text, None)
-    print("Invoice Number:", extractor.extract_invoice_number())
-    print("All Dates Found:", extractor.extract_dates())
-    print("Total Amount:", extractor.extract_total_amount())
-    print("Structured:", extractor.get_structured_data())
-
-
-
 
 
 class EmailExtractor:
@@ -421,52 +398,24 @@ class EmailExtractor:
         self.text = raw_text
 
     def extract_sender(self):
-        # non capturing group finds From and gets what comes after
         match = re.search(r"(?i)^From:\s*(.+)", self.text, re.MULTILINE)
         return match.group(1).strip() if match else None
 
     def extract_recipient(self):
-        # non capturing group finds To and gets what comes after
         match = re.search(r"(?i)^To:\s*(.+)", self.text, re.MULTILINE)
         return match.group(1).strip() if match else None
 
     def extract_date(self):
-        # non capturing group finds Date and gets what comes after
         match = re.search(r"(?i)^Date:\s*(.+)", self.text, re.MULTILINE)
         return match.group(1).strip() if match else None
 
     def extract_subject(self):
-        # non capturing group finds Subject and gets what comes after
         match = re.search(r"(?i)^Subject:\s*(.+)", self.text, re.MULTILINE)
         return match.group(1).strip() if match else None
 
     def extract_all_email_addresses(self):
-        # finds all email addresses in the text
-        # you dont need a capturing group () because 
-        # re.findall() will return a list of all matches
         pattern = r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
         return re.findall(pattern, self.text)
-
-# Test email
-if __name__ == "__main__":
-    sample_email_text = """
-    From: Jane Doe <jane.doe@example.com>
-    To: John Smith <jsmith@corp.net>
-    Date: October 12, 2025 10:30 AM
-    Subject: Q4 Project Update
-    
-    Hi John,
-    Please find the attached invoice for the Q4 project. If you have any questions, 
-    contact support@example.com.
-    
-    Best,
-    Jane
-    """
-    
-    email_ext = EmailExtractor(sample_email_text)
-    print("Sender:", email_ext.extract_sender())
-    print("Subject:", email_ext.extract_subject())
-    print("All Email Addresses Found:", email_ext.extract_all_email_addresses())
 
 
 class QuestionnaireExtractor:
@@ -529,31 +478,6 @@ class QuestionnaireExtractor:
                 continue
             results.append({"question": q, "answer": a})
         return results
-
-
-# Test questionare
-if __name__ == "__main__":
-    sample_questionnaire_text = """
-    CUSTOMER INTAKE QUESTIONNAIRE
-    Name: John Smith
-    Email: john.smith@example.com
-
-    1) Do you have any allergies?
-    Yes - peanuts
-
-    2. Preferred contact method:
-    [x] Email
-    [ ] Phone
-    [ ] SMS
-
-    What is your availability? 
-    Mon-Fri after 5pm
-    """
-
-    q_ext = QuestionnaireExtractor(sample_questionnaire_text)
-    print("\nQuestions:", q_ext.extract_questions())
-    print("Checkboxes:", q_ext.extract_checkboxes())
-    print("Key/Value:", q_ext.extract_key_value_answers())
 
 
 class ResumeExtractor:
@@ -629,34 +553,72 @@ class ResumeExtractor:
         return sections
 
 
-# Test resume
+# ── Smoke-tests (run with: python -m src.extractor) ──────────────────────────
+
 if __name__ == "__main__":
-    sample_resume_text = """
+    _invoice_text = """
+    Acme Corp
+    Invoice Number: INV-89475
+    Date: 15/03/2026
+    Due Date: Apr 15, 2026
+
+    Services Rendered .... $500.00
+    Tax .................. $50.00
+    Total: $550.00
+    """
+    inv = InvoiceExtractor(_invoice_text, None)
+    print("=== Invoice ===")
+    print("Number :", inv.extract_invoice_number())
+    print("Dates  :", inv.extract_dates())
+    print("Total  :", inv.extract_total_amount())
+    print("Full   :", inv.get_structured_data())
+
+    _email_text = """
+    From: Jane Doe <jane.doe@example.com>
+    To: John Smith <jsmith@corp.net>
+    Date: October 12, 2025 10:30 AM
+    Subject: Q4 Project Update
+
+    Hi John, please find the attached invoice.
+    Contact support@example.com with any questions.
+    """
+    em = EmailExtractor(_email_text)
+    print("\n=== Email ===")
+    print("Sender  :", em.extract_sender())
+    print("Subject :", em.extract_subject())
+    print("Emails  :", em.extract_all_email_addresses())
+
+    _questionnaire_text = """
+    CUSTOMER INTAKE QUESTIONNAIRE
+    Name: John Smith
+    Email: john.smith@example.com
+
+    1) Do you have any allergies?
+    Yes - peanuts
+
+    2. Preferred contact method:
+    [x] Email
+    [ ] Phone
+    [ ] SMS
+    """
+    qu = QuestionnaireExtractor(_questionnaire_text)
+    print("\n=== Questionnaire ===")
+    print("Questions :", qu.extract_questions())
+    print("Checkboxes:", qu.extract_checkboxes())
+
+    _resume_text = """
     Jane A. Doe
     janedoe@gmail.com  |  +1 (555) 123-4567
-    https://www.linkedin.com/in/jane-doe  https://github.com/janedoe
-
-    SUMMARY
-    Data analyst with 5+ years of experience in Python, SQL, and dashboards.
-
-    SKILLS
-    Python, Pandas, SQL, Tableau, PowerBI
+    https://www.linkedin.com/in/jane-doe
 
     EDUCATION
     BSc Computer Science — Example University (2018)
 
     EXPERIENCE
     Data Analyst — Example Corp (2020–2025)
-    - Built ETL pipelines and automated reporting.
     """
-
-    r_ext = ResumeExtractor(sample_resume_text)
-    print("\nName:", r_ext.extract_name())
-    print("Email:", r_ext.extract_email())
-    print("Phone:", r_ext.extract_phone_number())
-    print("Links:", r_ext.extract_links())
-    print("Sections:", list(r_ext.extract_sections().keys()))
-
-
-
-
+    re_ = ResumeExtractor(_resume_text)
+    print("\n=== Resume ===")
+    print("Name     :", re_.extract_name())
+    print("Email    :", re_.extract_email())
+    print("Sections :", list(re_.extract_sections().keys()))

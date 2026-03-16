@@ -40,6 +40,8 @@ import json
 import sys
 from collections import Counter
 from pathlib import Path
+
+from sklearn.preprocessing import LabelEncoder
 from tqdm import tqdm
 
 from src.ocr_engine import OCREngine
@@ -179,8 +181,6 @@ def main() -> None:
     # Re-fit on full corpus after evaluation so no data is wasted
     if len(set(labels)) > 1 and not (accuracy != accuracy):  # not NaN
         print("  Re-fitting on full corpus (all data) …")
-        import numpy as np
-        from sklearn.preprocessing import LabelEncoder
         le_full = LabelEncoder().fit(labels)
         y_full  = le_full.transform(labels)
         clf.model.fit(X, y_full)

@@ -105,6 +105,16 @@ class ClassificationPipeline:
         label      = top["label"]
         confidence = top["confidence"]
 
+        # Invoice-only structured extraction (best-effort; never break classification)
+        invoice_fields = None
+        if str(label).strip().lower() == "invoice":
+            try:
+                from src.extractor import InvoiceExtractor
+
+                invoice_fields = InvoiceExtractor(raw_text, ocr_data_dict=None).get_structured_data()
+            except Exception:
+                invoice_fields = None
+
         # Phase 4 – Pack handoff payload
         article      = "an" if label[0].upper() in "AEIOU" else "a"
         is_uncertain = confidence < UNCERTAIN_THRESHOLD
@@ -126,6 +136,7 @@ class ClassificationPipeline:
             "language_name":      language_name,
             "is_non_english":     is_non_english,
             "raw_text":           raw_text,
+            "invoice_fields":     invoice_fields,
         }
 
     # ── Formatted console handoff ────────────────────────────────────────────

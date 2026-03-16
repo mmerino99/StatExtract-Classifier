@@ -18,10 +18,13 @@ Improvements over baseline
     leverage hard signals like $ symbols, @ addresses, checkbox patterns.
 """
 
+import logging
 import pickle
 from pathlib import Path
 
 import numpy as np
+
+log = logging.getLogger(__name__)
 from sklearn.svm import SVC
 from sklearn.model_selection import train_test_split, GridSearchCV, StratifiedKFold
 from sklearn.metrics import classification_report, accuracy_score
@@ -144,11 +147,11 @@ class DocumentClassifier:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         with open(path, "wb") as f:
             pickle.dump({"model": self.model, "encoder": self.label_encoder}, f)
-        print(f"  Classifier saved → {path}")
+        log.info("Classifier saved → %s", path)
 
     def load(self, path: str | Path) -> None:
         with open(path, "rb") as f:
             data = pickle.load(f)
         self.model = data["model"]
         self.label_encoder = data["encoder"]
-        print(f"  Classifier loaded ← {path}")
+        log.info("Classifier loaded ← %s", path)

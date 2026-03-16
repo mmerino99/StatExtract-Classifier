@@ -50,6 +50,12 @@ _DATE_PAT_STR = (
 # Pre-compiled version for standalone date searches
 _DATE_PAT = re.compile(_DATE_PAT_STR, re.IGNORECASE)
 
+# Keywords that disqualify a line from being a company/issuer name
+_ISSUER_SKIP_PAT = re.compile(
+    r"(?i)\b(invoice|receipt|bill|statement|date|total|amount|tax|vat"
+    r"|due|payment|no\.|number|tel|phone|fax|email|www\.|http|page)\b"
+)
+
 
 class InvoiceExtractor:
     """
@@ -314,10 +320,6 @@ class InvoiceExtractor:
         first few non-empty lines (often the header/logo text).
         Skip lines that look like addresses, dates, or invoice keywords.
         """
-        _SKIP = re.compile(
-            r"(?i)\b(invoice|receipt|bill|statement|date|total|amount|tax|vat"
-            r"|due|payment|no\.|number|tel|phone|fax|email|www\.|http|page)\b"
-        )
         lines_checked = 0
         for line in self.text.splitlines():
             s = _normalise_space(line)
@@ -328,7 +330,7 @@ class InvoiceExtractor:
                 break
             if len(s) < 2 or len(s) > 80:
                 continue
-            if _SKIP.search(s):
+            if _ISSUER_SKIP_PAT.search(s):
                 continue
             if re.fullmatch(r"[\d\s\-\+\(\)\./,@]{4,}", s):
                 continue

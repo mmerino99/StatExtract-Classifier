@@ -30,10 +30,13 @@ Why structural features matter
 """
 
 import re
+import logging
 import pickle
 from pathlib import Path
 
 import numpy as np
+
+log = logging.getLogger(__name__)
 import scipy.sparse as sp
 import nltk
 from nltk.corpus import stopwords
@@ -161,7 +164,8 @@ class TFIDFFeatureExtractor:
         tfidf   = self.vectorizer.fit_transform(cleaned)
         combined = self._combine(tfidf, texts, fit=True)
         n_tfidf  = tfidf.shape[1]
-        print(f"  Features: {n_tfidf} TF-IDF + {len(_FEATURE_NAMES)} structural = {combined.shape[1]} total")
+        log.info("Features: %d TF-IDF + %d structural = %d total",
+                 n_tfidf, len(_FEATURE_NAMES), combined.shape[1])
         return combined
 
     def transform(self, texts: list[str]):
@@ -175,7 +179,7 @@ class TFIDFFeatureExtractor:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         with open(path, "wb") as f:
             pickle.dump({"vectorizer": self.vectorizer, "scaler": self.scaler}, f)
-        print(f"  Vectorizer saved → {path}")
+        log.info("Vectorizer saved → %s", path)
 
     def load(self, path: str | Path) -> None:
         with open(path, "rb") as f:
@@ -186,4 +190,4 @@ class TFIDFFeatureExtractor:
             self.scaler     = data["scaler"]
         else:
             self.vectorizer = data
-        print(f"  Vectorizer loaded ← {path}")
+        log.info("Vectorizer loaded ← %s", path)

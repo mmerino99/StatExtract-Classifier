@@ -37,6 +37,7 @@ What improved
 
 import argparse
 import json
+import math
 import sys
 from collections import Counter
 from pathlib import Path
@@ -179,7 +180,7 @@ def main() -> None:
     accuracy = clf.train(X, labels, grid_search=not args.no_grid)
 
     # Re-fit on full corpus after evaluation so no data is wasted
-    if len(set(labels)) > 1 and not (accuracy != accuracy):  # not NaN
+    if len(set(labels)) > 1 and not math.isnan(accuracy):
         print("  Re-fitting on full corpus (all data) …")
         le_full = LabelEncoder().fit(labels)
         y_full  = le_full.transform(labels)
@@ -188,10 +189,14 @@ def main() -> None:
 
     # ── Save models ────────────────────────────────────────────────────────
     print("\n[Saving models]")
-    extractor.save(MODELS_DIR / "vectorizer.pkl")
-    clf.save(MODELS_DIR / "classifier.pkl")
+    vectorizer_path = MODELS_DIR / "vectorizer.pkl"
+    classifier_path = MODELS_DIR / "classifier.pkl"
+    extractor.save(vectorizer_path)
+    clf.save(classifier_path)
+    print(f"  Vectorizer  saved → {vectorizer_path}")
+    print(f"  Classifier  saved → {classifier_path}")
 
-    if accuracy == accuracy:  # not NaN
+    if not math.isnan(accuracy):
         print(f"\n  Training complete.  Test accuracy: {accuracy:.2%}")
     else:
         print("\n  Training complete (accuracy not measurable — add more data).")

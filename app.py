@@ -94,14 +94,13 @@ def classify():
 
         # ── Save OCR debug log ─────────────────────────────────────────────
         try:
-            ts        = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            orig_name = original_filename  # captured before request context closes
-            safe_name = re.sub(r"[^\w\-.]", "_", orig_name)
+            ts         = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            safe_name  = re.sub(r"[^\w\-.]", "_", original_filename)
             debug_file = DEBUG_OCR_DIR / f"{ts}_{safe_name}.txt"
             inv = result.get("invoice_fields") or {}
             lines = [
                 "=== OCR DEBUG ===",
-                f"File      : {orig_name}",
+                f"File      : {original_filename}",
                 f"Engine    : {result['ocr_engine']}",
                 f"Words     : {result['word_count']}",
                 f"Label     : {result['label']}",
@@ -182,7 +181,7 @@ def classify():
         if tmp_path and os.path.exists(tmp_path):
             os.unlink(tmp_path)
 
- 
+
 if __name__ == "__main__":
     # Disable the Flask auto‑reloader on Windows to avoid constant restarts,
     # which can cause "Failed to fetch" errors in the browser when a request

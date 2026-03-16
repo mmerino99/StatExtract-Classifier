@@ -39,6 +39,7 @@ def main() -> None:
 
     try:
         pipeline.load()
+        print("  Models loaded.")
     except FileNotFoundError:
         print(
             "\n  ERROR: Trained models not found.\n"

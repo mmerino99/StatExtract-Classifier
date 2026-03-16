@@ -191,6 +191,27 @@ body {
   max-height: 480px; overflow-y: auto;
 }
 
+/* ── Invoice fields block ───────────────────────────────────────────────── */
+.invoice-fields-block {
+  background: #f8fafc; border: 1px solid var(--border);
+  border-radius: 8px; padding: 16px; margin-bottom: 20px;
+}
+.invoice-fields-title {
+  font-size: .75rem; font-weight: 600; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: .05em; margin-bottom: 12px;
+}
+.invoice-fields-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 16px;
+}
+@media (max-width: 520px) {
+  .invoice-fields-grid { grid-template-columns: 1fr; }
+}
+.invoice-field { padding: 10px 12px; background: #fff; border: 1px solid var(--border); border-radius: 8px; }
+.invoice-field-k { font-size: .72rem; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .04em; }
+.invoice-field-v { font-size: .92rem; font-weight: 600; color: var(--text-primary); word-break: break-word; }
+
 /* ── Shared reset button ─────────────────────────────────────────────────── */
 .btn-reset {
   background: none; border: 1px solid var(--border); border-radius: 8px;

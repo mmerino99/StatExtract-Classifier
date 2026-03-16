@@ -33,6 +33,13 @@
   const resetBtn      = document.getElementById("resetBtn");
   const errorResetBtn = document.getElementById("errorResetBtn");
   const loadingStage  = document.getElementById("loadingStage");
+  const invoiceFieldsBlock = document.getElementById("invoiceFieldsBlock");
+  const invNumber = document.getElementById("invNumber");
+  const invDate = document.getElementById("invDate");
+  const invDueDate = document.getElementById("invDueDate");
+  const invIssuer = document.getElementById("invIssuer");
+  const invRecipient = document.getElementById("invRecipient");
+  const invTotal = document.getElementById("invTotal");
 
   let selectedFileObj = null;
   let _startTime      = 0;
@@ -186,6 +193,21 @@
 
     chipWords.innerHTML     = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16h16V8z"/><polyline points="14 2 14 8 20 8"/></svg> ${data.word_count ?? "—"} words extracted`;
     chipTime.innerHTML      = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ${data.elapsed_ms ?? "—"} ms`;
+
+    // ── Invoice fields (invoice-only) ──
+    const inv = data.invoice_fields;
+    const showInv = label === "INVOICE" && inv && typeof inv === "object";
+    if (invoiceFieldsBlock) {
+      invoiceFieldsBlock.classList.toggle("hidden", !showInv);
+    }
+    if (showInv) {
+      invNumber.textContent = inv.invoice_number ?? "—";
+      invDate.textContent = inv.invoice_date ?? "—";
+      invDueDate.textContent = inv.due_date ?? "—";
+      invIssuer.textContent = inv.issuer_name ?? "—";
+      invRecipient.textContent = inv.recipient_name ?? "—";
+      invTotal.textContent = (inv.total_amount ?? "—").toString();
+    }
 
     // ── Text preview ──
     textPreview.textContent = data.text_preview || "(no text extracted)";

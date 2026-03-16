@@ -12,8 +12,10 @@ Usage
 """
 
 import os
+import re
 import time
 import tempfile
+import datetime
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request
@@ -23,6 +25,10 @@ from src.ocr_engine import LowQualityImageError
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 32 * 1024 * 1024  # 32 MB upload limit
+
+# Every upload's OCR text is saved here so you can inspect what Tesseract saw
+DEBUG_OCR_DIR = Path("debug_ocr")
+DEBUG_OCR_DIR.mkdir(exist_ok=True)
 
 ALLOWED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".tiff", ".tif", ".bmp"}
 
@@ -85,6 +91,24 @@ def classify():
         result       = pipeline.predict_category(tmp_path)
         elapsed_ms   = round((time.perf_counter() - t_start) * 1000)
 
+        # ── Save OCR debug log ─────────────────────────────────────────────
+        try:
+            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            safe_name = re.sub(r"[^\w\-.]", "_", file.filename or "upload")
+            debug_file = DEBUG_OCR_DIR / f"{ts}_{safe_name}.txt"
+            debug_file.write_text(
+                f"=== OCR DEBUG ===\n"
+                f"File    : {file.filename}\n"
+                f"Engine  : {result['ocr_engine']}\n"
+                f"Words   : {result['word_count']}\n"
+                f"Label   : {result['label']}\n"
+                f"=================\n\n"
+                + result["raw_text"],
+                encoding="utf-8",
+            )
+        except Exception:
+            pass  # debug logging must never break the main flow
+
         word_count      = result["word_count"]
         low_quality     = word_count < LOW_QUALITY_WORD_THRESHOLD
         is_non_english  = result.get("is_non_english", False)
@@ -123,6 +147,8 @@ def classify():
             "ocr_engine":         result["ocr_engine"],
             "word_count":         word_count,
             "text_preview":       result["raw_text"].strip(),
+            # ── Invoice structured extraction (invoice-only) ──────────────
+            "invoice_fields":     result.get("invoice_fields"),
             # ── Language ─────────────────────────────────────────────────
             "detected_language":  result.get("detected_language", "unknown"),
             "language_name":      language_name,
@@ -144,6 +170,9 @@ def classify():
         if tmp_path and os.path.exists(tmp_path):
             os.unlink(tmp_path)
 
-
+ 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    # Disable the Flask auto‑reloader on Windows to avoid constant restarts,
+    # which can cause "Failed to fetch" errors in the browser when a request
+    # is interrupted mid‑processing.
+    app.run(debug=True, port=5000, use_reloader=False)

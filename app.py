@@ -65,6 +65,7 @@ def classify():
     file = request.files["file"]
     if not file.filename:
         return jsonify({"error": "Empty filename."}), 400
+    original_filename = file.filename  # save before request context might close
 
     suffix = Path(file.filename).suffix.lower()
     if suffix not in ALLOWED_EXTENSIONS:
@@ -93,21 +94,32 @@ def classify():
 
         # ── Save OCR debug log ─────────────────────────────────────────────
         try:
-            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            safe_name = re.sub(r"[^\w\-.]", "_", file.filename or "upload")
+            ts        = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            orig_name = original_filename  # captured before request context closes
+            safe_name = re.sub(r"[^\w\-.]", "_", orig_name)
             debug_file = DEBUG_OCR_DIR / f"{ts}_{safe_name}.txt"
-            debug_file.write_text(
-                f"=== OCR DEBUG ===\n"
-                f"File    : {file.filename}\n"
-                f"Engine  : {result['ocr_engine']}\n"
-                f"Words   : {result['word_count']}\n"
-                f"Label   : {result['label']}\n"
-                f"=================\n\n"
-                + result["raw_text"],
-                encoding="utf-8",
-            )
-        except Exception:
-            pass  # debug logging must never break the main flow
+            inv = result.get("invoice_fields") or {}
+            lines = [
+                "=== OCR DEBUG ===",
+                f"File      : {orig_name}",
+                f"Engine    : {result['ocr_engine']}",
+                f"Words     : {result['word_count']}",
+                f"Label     : {result['label']}",
+            ]
+            if inv:
+                lines += [
+                    "--- Invoice fields ---",
+                    f"  invoice_number  : {inv.get('invoice_number')}",
+                    f"  invoice_date    : {inv.get('invoice_date')}",
+                    f"  due_date        : {inv.get('due_date')}",
+                    f"  issuer_name     : {inv.get('issuer_name')}",
+                    f"  recipient_name  : {inv.get('recipient_name')}",
+                    f"  total_amount    : {inv.get('total_amount')}",
+                ]
+            lines += ["=================", "", result["raw_text"]]
+            debug_file.write_text("\n".join(lines), encoding="utf-8")
+        except Exception as _dbg_exc:
+            app.logger.debug("OCR debug log failed: %s", _dbg_exc)
 
         word_count      = result["word_count"]
         low_quality     = word_count < LOW_QUALITY_WORD_THRESHOLD

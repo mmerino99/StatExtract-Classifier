@@ -26,21 +26,29 @@ def _to_float(s: str) -> float | None:
 
 # ── Compiled date pattern (reused across methods) ────────────────────────────
 
-_DATE_PAT = re.compile(
-    r"(?i)"
+# Date pattern WITHOUT an inline (?i) flag so it can be safely embedded
+# inside larger compiled patterns. Case-insensitivity is applied by the
+# caller via re.IGNORECASE.
+_DATE_PAT_STR = (
     # YYYY-MM-DD or YYYY/MM/DD
-    r"\b\d{4}[/-]\d{1,2}[/-]\d{1,2}|"
+    r"\b\d{4}[/-]\d{1,2}[/-]\d{1,2}"
+    r"|"
     # DD/MM/YYYY or MM/DD/YYYY or DD-MM-YYYY
-    r"\b\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{2,4}|"
+    r"\b\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{2,4}"
+    r"|"
     # "15 March 2026" or "15th March 2026" or "15th of March, 2026"
-    r"\b\d{1,2}(?:st|nd|rd|th)?\s+(?:of\s+)?(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|"
-    r"Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|"
-    r"Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)[a-z]*[\s,]+\d{2,4}|"
+    r"\b\d{1,2}(?:st|nd|rd|th)?\s+(?:of\s+)?"
+    r"(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?"
+    r"|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)"
+    r"[a-z]*[\s,]+\d{2,4}"
+    r"|"
     # "March 15, 2026" or "March 15 2026"
-    r"\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|"
-    r"Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)"
+    r"\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?"
+    r"|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)"
     r"[a-z]*[\s,]+\d{1,2}(?:st|nd|rd|th)?[\s,]+\d{2,4}"
 )
+# Pre-compiled version for standalone date searches
+_DATE_PAT = re.compile(_DATE_PAT_STR, re.IGNORECASE)
 
 
 class InvoiceExtractor:
@@ -127,13 +135,11 @@ class InvoiceExtractor:
     def _extract_labeled_date(self, label_patterns: list[str]) -> str | None:
         """
         Find a date that immediately follows one of the given label patterns.
-        Allows up to ~60 characters of gap (colon, spaces, newline, etc.)
-        between the label and the date value.
+        Allows a colon, spaces, or a newline between the label and the date value.
         """
         label_re = "|".join(label_patterns)
         pattern = re.compile(
-            rf"(?i)(?:{label_re})\s*[:\-]?\s*(?:\n\s*)?"
-            r"(" + _DATE_PAT.pattern + r")",
+            rf"(?:{label_re})\s*[:\-]?\s*(?:\n\s*)?({_DATE_PAT_STR})",
             re.IGNORECASE,
         )
         m = pattern.search(self.text)

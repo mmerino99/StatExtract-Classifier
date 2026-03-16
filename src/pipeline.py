@@ -110,10 +110,11 @@ class ClassificationPipeline:
         if str(label).strip().lower() == "invoice":
             try:
                 from src.extractor import InvoiceExtractor
-
                 invoice_fields = InvoiceExtractor(raw_text, ocr_data_dict=None).get_structured_data()
-            except Exception:
-                invoice_fields = None
+            except Exception as _exc:
+                import traceback
+                print(f"  [InvoiceExtractor] extraction failed: {_exc}")
+                traceback.print_exc()
 
         # Phase 4 – Pack handoff payload
         article      = "an" if label[0].upper() in "AEIOU" else "a"

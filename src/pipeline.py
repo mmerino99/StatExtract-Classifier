@@ -149,7 +149,7 @@ class ClassificationPipeline:
         print(bar)
         print(f"  File         : {result['file']}")
         print(f"  Label        : {result['label']}"
-              + ("  ⚠ UNCERTAIN" if result["is_uncertain"] else ""))
+              + ("  [UNCERTAIN]" if result["is_uncertain"] else ""))
         print(f"  Confidence   : {result['confidence']:.1%}")
         print(f"  OCR engine   : {result['ocr_engine']}")
         print(f"  Words found  : {result['word_count']}")

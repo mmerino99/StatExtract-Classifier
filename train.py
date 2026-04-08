@@ -43,6 +43,10 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+# Force UTF-8 output on Windows terminals that default to cp1252
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 from sklearn.preprocessing import LabelEncoder
 from tqdm import tqdm
 
@@ -119,7 +123,7 @@ def collect_training_data(
                     if new_entries % 10 == 0:
                         save_cache(cache)
                 except Exception as exc:
-                    print(f"    ✗ {fpath.name}: {exc}")
+                    print(f"    [SKIP] {fpath.name}: {exc}")
                     continue
 
             if text.strip():

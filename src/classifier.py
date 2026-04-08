@@ -80,7 +80,7 @@ class DocumentClassifier:
 
         # Need at least 2 samples per class for stratified split
         if min_class < 2:
-            print("  ⚠  Some classes have only 1 sample — skipping train/test split.")
+            print("  [WARN] Some classes have only 1 sample -- skipping train/test split.")
             print("     Add more training documents for reliable evaluation.")
             self.model.fit(X, y_enc)
             return _nan_result
@@ -98,7 +98,7 @@ class DocumentClassifier:
         if grid_search and X_train.shape[0] >= n_classes * 5:
             # 5-fold CV requires at least 5 samples per class in the training set
             cv_folds = min(5, min(np.bincount(y_train)))
-            print(f"  Running GridSearchCV (C ∈ {_C_GRID}, {cv_folds}-fold CV) …")
+            print(f"  Running GridSearchCV (C in {_C_GRID}, {cv_folds}-fold CV) ...")
             gs = GridSearchCV(
                 SVC(kernel="linear", probability=True, random_state=42),
                 param_grid={"C": _C_GRID},

@@ -36,6 +36,7 @@ What improved
 """
 
 import argparse
+import datetime
 import json
 import math
 import sys
@@ -176,8 +177,9 @@ def main() -> None:
 
     # ── Phase 3: Train SVM (with optional GridSearchCV) ───────────────────
     print("\n[Phase 3] Training Linear SVM …")
-    clf = DocumentClassifier()
-    accuracy = clf.train(X, labels, grid_search=not args.no_grid)
+    clf     = DocumentClassifier()
+    metrics = clf.train(X, labels, grid_search=not args.no_grid)
+    accuracy = metrics["accuracy"]
 
     # Re-fit on full corpus after evaluation so no data is wasted
     if len(set(labels)) > 1 and not math.isnan(accuracy):
@@ -195,6 +197,24 @@ def main() -> None:
     clf.save(classifier_path)
     print(f"  Vectorizer  saved → {vectorizer_path}")
     print(f"  Classifier  saved → {classifier_path}")
+
+    # ── Save training report ───────────────────────────────────────────────
+    report_path = MODELS_DIR / "training_report.json"
+    report = {
+        "trained_at":      datetime.datetime.now().isoformat(timespec="seconds"),
+        "total_documents": len(texts),
+        "documents_per_class": dict(counts),
+        "grid_search":     not args.no_grid,
+        "best_C":          metrics["best_C"],
+        "cv_accuracy":     metrics["cv_accuracy"],
+        "train_samples":   metrics["train_samples"],
+        "test_samples":    metrics["test_samples"],
+        "accuracy":        metrics["accuracy"],
+        "per_class":       metrics["per_class"],
+    }
+    with open(report_path, "w", encoding="utf-8") as f:
+        json.dump(report, f, indent=2, ensure_ascii=False)
+    print(f"  Training report saved → {report_path}")
 
     if not math.isnan(accuracy):
         print(f"\n  Training complete.  Test accuracy: {accuracy:.2%}")

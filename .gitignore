@@ -31,9 +31,11 @@ debug_ocr/
 data/processed/
 data/ocr_cache.json
 data/*.zip
+data/raw/
 
-# Trained models (large binary files — regenerate with train.py)
+# Trained models and reports (regenerate with train.py)
 models/*.pkl
+models/training_report.json
 
 # Uploaded files that Flask may cache
 uploads/

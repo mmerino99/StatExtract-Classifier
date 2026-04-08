@@ -48,25 +48,42 @@ class DocumentClassifier:
     # ── Training ─────────────────────────────────────────────────────────────
 
     def train(self, X, y: list[str], test_size: float = 0.2,
-              grid_search: bool = True) -> float:
+              grid_search: bool = True) -> dict:
         """
         Train on X and string labels y.
         When grid_search=True (default) runs 5-fold CV over _C_GRID to pick
         the best regularisation strength before reporting test-set metrics.
-        Returns test-set accuracy.
+
+        Returns a metrics dict:
+          {
+            "accuracy":     float,          overall test-set accuracy (or NaN)
+            "cv_accuracy":  float | None,   best CV score from GridSearchCV
+            "best_C":       float | None,   regularisation parameter chosen
+            "train_samples": int,
+            "test_samples":  int,
+            "per_class":    {label: {precision, recall, f1_score, support}}
+          }
         """
         y_enc = self.label_encoder.fit_transform(y)
 
-        n_classes  = len(set(y_enc))
-        n_samples  = len(y_enc)
-        min_class  = min(np.bincount(y_enc))
+        n_classes = len(set(y_enc))
+        min_class = min(np.bincount(y_enc))
+
+        _nan_result: dict = {
+            "accuracy": float("nan"),
+            "cv_accuracy": None,
+            "best_C": None,
+            "train_samples": len(y_enc),
+            "test_samples": 0,
+            "per_class": {},
+        }
 
         # Need at least 2 samples per class for stratified split
         if min_class < 2:
             print("  ⚠  Some classes have only 1 sample — skipping train/test split.")
             print("     Add more training documents for reliable evaluation.")
             self.model.fit(X, y_enc)
-            return float("nan")
+            return _nan_result
 
         X_train, X_test, y_train, y_test = train_test_split(
             X, y_enc,
@@ -74,6 +91,9 @@ class DocumentClassifier:
             random_state=42,
             stratify=y_enc,
         )
+
+        cv_accuracy: float | None = None
+        best_C: float | None = None
 
         if grid_search and X_train.shape[0] >= n_classes * 5:
             # 5-fold CV requires at least 5 samples per class in the training set
@@ -87,8 +107,9 @@ class DocumentClassifier:
                 n_jobs=-1,
             )
             gs.fit(X_train, y_train)
-            best_C = gs.best_params_["C"]
-            print(f"  Best C = {best_C}  (CV accuracy = {gs.best_score_:.2%})")
+            best_C      = float(gs.best_params_["C"])
+            cv_accuracy = float(gs.best_score_)
+            print(f"  Best C = {best_C}  (CV accuracy = {cv_accuracy:.2%})")
             self.model = SVC(kernel="linear", C=best_C, probability=True, random_state=42)
         else:
             print(f"  Skipping grid search (not enough samples). Using C={self.model.C}")
@@ -97,13 +118,38 @@ class DocumentClassifier:
         self.model.fit(X_train, y_train)
 
         y_pred = self.model.predict(X_test)
-        acc    = accuracy_score(y_test, y_pred)
+        acc    = float(accuracy_score(y_test, y_pred))
+
+        report_str  = classification_report(y_test, y_pred,
+                                            target_names=self.label_encoder.classes_)
+        report_dict = classification_report(y_test, y_pred,
+                                            target_names=self.label_encoder.classes_,
+                                            output_dict=True)
 
         print("\n  === Classification Report ===")
-        print(classification_report(y_test, y_pred,
-                                    target_names=self.label_encoder.classes_))
+        print(report_str)
         print(f"  Overall Accuracy : {acc:.2%}\n")
-        return acc
+
+        # Keep only per-class rows (drop 'accuracy', 'macro avg', 'weighted avg')
+        per_class = {
+            label: {
+                "precision": round(vals["precision"], 4),
+                "recall":    round(vals["recall"], 4),
+                "f1_score":  round(vals["f1-score"], 4),
+                "support":   int(vals["support"]),
+            }
+            for label, vals in report_dict.items()
+            if label in self.label_encoder.classes_
+        }
+
+        return {
+            "accuracy":      round(acc, 4),
+            "cv_accuracy":   round(cv_accuracy, 4) if cv_accuracy is not None else None,
+            "best_C":        best_C,
+            "train_samples": int(X_train.shape[0]),
+            "test_samples":  int(X_test.shape[0]),
+            "per_class":     per_class,
+        }
 
     # ── Prediction ───────────────────────────────────────────────────────────
 

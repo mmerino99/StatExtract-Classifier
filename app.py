@@ -56,6 +56,17 @@ def index():
     return render_template("index.html")
 
 
+@app.route("/metrics")
+def metrics():
+    report_path = Path("models/training_report.json")
+    if not report_path.exists():
+        report = None
+    else:
+        with open(report_path, "r", encoding="utf-8") as f:
+            report = json.load(f)
+    return render_template("metrics.html", report=report)
+
+
 @app.route("/classify", methods=["POST"])
 def classify():
     # ── Validate upload ────────────────────────────────────────────────────
